@@ -1,4 +1,4 @@
-import express, { Request, Response, NextFunction } from "express";
+import express from "express";
 import cors from "cors";
 import helmet from "helmet";
 import mongoSanitize from "express-mongo-sanitize";
@@ -6,8 +6,12 @@ import hpp from "hpp";
 import { aj } from "./config/arcjet";
 import { rateLimit } from "express-rate-limit";
 import http from "node:http";
+import { errorHandler } from "./middleware/error-handler.middlewere";
+import userRoutes from "./routes/user.routes";
+import cookieParser from 'cookie-parser';
 
 import dotenv from "dotenv";
+import e from "express";
 dotenv.config();
 
 const app = express();
@@ -29,7 +33,7 @@ app.use(cors({
 // ======================================================
 app.use(express.json({ limit: "20kb" }));
 app.use(express.urlencoded({ extended: true, limit: "20kb" }));
-
+app.use(cookieParser());
 
 // ======================================================
 // 3. 🛡️ Security Middlewares
@@ -54,8 +58,16 @@ const limiter = rateLimit({
 });
 app.use(limiter);
 
+
+
 // ======================================================
-// 4. 🤖 Arcjet — AI Security Layer Middleware
+// 4. 🚀 Test Route
+// ======================================================
+    app.use("/api/users", userRoutes);
+
+
+// ======================================================
+// 5. 🤖 Arcjet — AI Security Layer Middleware
 // ======================================================
 // Protect Any Route
 app.use(async (req, res, next) => {
@@ -91,11 +103,7 @@ server.listen(3000);
 // ======================================================
 // 5. 🔥 Global Error Handler
 // ======================================================
-app.use((err: Error, req: Request, res: Response, next: NextFunction) => {
-    console.error("🔥 Error:", err);
-    res.status(500).json({ error: "Internal Server Error" });
-})
-
+app.use(errorHandler);
 
 
 export default app;

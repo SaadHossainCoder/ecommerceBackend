@@ -18,9 +18,9 @@ export const sendEmail = async (to: string, subject: string, html: string) => {
         return;
     };
     await transporter.sendMail({
-        from: process.env.EMAIL_FROM,
+        from: process.env.SMTP_USER,
         to,
         subject,
-        html
+        html,
     });
 }
