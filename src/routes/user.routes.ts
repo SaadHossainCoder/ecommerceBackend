@@ -1,14 +1,14 @@
 import { Router } from "express";
 import * as userController from "../controllers/auth.controller";
-import {validateZod} from "../middleware/validate-zod.middlewere"
-import* as z from "../validators/user.zod"
-import {authGuard} from "../middleware/auth.guard"
+import { validateZod } from "../middleware/validate-zod.middleware"
+import * as z from "../validators/user.zod"
+import { authGuard } from "../middleware/auth.guard"
 
 
 
 const router = Router();
 
-router.post("/signup", validateZod(z.signupSchema), userController.signup);
+router.post("/signup", userController.signup);
 router.post("/login", validateZod(z.loginSchema), userController.login);
 router.post("/logout", authGuard, userController.logout);
 router.post("/refresh", userController.refresh);

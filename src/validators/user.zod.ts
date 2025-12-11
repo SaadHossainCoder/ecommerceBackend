@@ -4,6 +4,7 @@ interface SignupInput {
     username: string;
     email: string;
     password: string;
+    role: string;
 }
 
 interface LoginInput {
@@ -12,16 +13,17 @@ interface LoginInput {
 }
 
 export const signupSchema = z.object({
-        username: z.string().min(3).max(30),
-        email: z.string().email(),
-        password: z.string().min(6),
+    username: z.string().min(3).max(30),
+    email: z.string().email(),
+    password: z.string().min(6),
+    role: z.enum(["USER", "ADMIN"])
 }) as z.ZodSchema<SignupInput>;
 
 export const loginSchema = z.object({
-        body: z.object({
-                identifier: z.string().min(1),
-                password: z.string().min(1),
-        })
+    body: z.object({
+        identifier: z.string().min(1),
+        password: z.string().min(1),
+    })
 }) as z.ZodSchema<{ body: LoginInput }>;
 
 export type SignupSchemaType = z.infer<typeof signupSchema>;
@@ -42,9 +44,12 @@ export const forgotSchema = z.object({
 
 export const resetSchema = z.object({
     body: z.object({
-        uid: z.string().min(1),
         token: z.string().min(1),
-        newPassword: z.string().min(6)
+        password: z.string().min(6),
+        confirmPassword: z.string().min(6)
+    }).refine((data) => data.password === data.confirmPassword, {
+        message: "Passwords do not match",
+        path: ["confirmPassword"]
     })
 });
 

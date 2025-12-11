@@ -1,11 +1,9 @@
-// import dotenv and configure 
-// This should be the very first thing in your application
+// Load environment variables as the VERY FIRST thing before any imports
+import "dotenv/config";
 
 import app from "./app";
-import dotenv from "dotenv";
-dotenv.config();
 
-const port = "3000";
+const port = process.env.PORT || 3000;
 
 app.get("/", (req, res) => {
     res.send("Hello from the secure server!");
@@ -14,4 +12,5 @@ app.get("/", (req, res) => {
 
 app.listen(port, () => {
     console.log(`Example app listening on port ${port}`);
+    console.log(`http://localhost:${port}`);
 });

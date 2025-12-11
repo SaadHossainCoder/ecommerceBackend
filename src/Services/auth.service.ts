@@ -1,16 +1,15 @@
-import { PrismaClient } from "@prisma/client/extension";
 import { hashPassword, hashToken, randomTokenHex, verifyPassword } from "../utils/hash.utils"
 import { sendEmail } from "../utils/emailSend.utils"
 import { signAccessToken } from "../utils/token.utils";
-
-const prisma = new PrismaClient();
-
+import {apiStatusCode} from "../lib/apiCode.lib";
+import prisma from "../prisma/client";
 // Signup service
-export const signup = async (email: string, password: string, username: string, role: string) => {
+export const signup = async (username: string, email: string, password: string,  role: string) => {
     try {
+        if (!email || !password || !username || !role) throw new Error(`Invalid request status code: ${apiStatusCode.NotFound}`);
         const existing = await prisma.user.findFirst({
             where: {
-                or: [{ email }, { username }]
+                OR: [{ email }, { username }]
             }
         })
         if (existing) throw new Error("Email or Username already in use");
@@ -22,7 +21,7 @@ export const signup = async (email: string, password: string, username: string, 
             data: {
                 username,
                 email,
-                passwordHash,
+                password: passwordHash,
                 role,
             }
         });
@@ -33,7 +32,7 @@ export const signup = async (email: string, password: string, username: string, 
             data: {
                 userId: user.id,
                 tokenHash: hashToken(tokenPlain),
-                type: "VERIFY_EMAIL",
+                purpose: "VERIFY_EMAIL",
                 expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000) // 24 hours
             }
         })
@@ -61,13 +60,14 @@ export const signup = async (email: string, password: string, username: string, 
 // login service
 export const login = async (email: string, password: string) => {
     try {
+        if (!email || !password) throw new Error(`Invalid request status code: ${apiStatusCode.NotFound}`);
         const user = await prisma.user.findFirst({
             where: { email }
         });
         if (!user) throw new Error("User not found");
 
         // password verification
-        const isPasswordValid = await verifyPassword(password, user.passwordHash);
+        const isPasswordValid = await verifyPassword(password, user.password);
         if (!isPasswordValid) throw new Error("Invalid email/username or password");
 
         // access token
@@ -93,11 +93,13 @@ export const login = async (email: string, password: string) => {
 // logout service
 export const logout = async (userId: string, refreshToken: string) => {
     try {
+        if (!userId || !refreshToken) throw new Error(`Invalid request status code: ${apiStatusCode.NotFound}`);
         const tokenHash = hashToken(refreshToken);
         await prisma.refreshToken.updateMany({
             where: {
                 userId,
-                tokenHash
+                tokenHash,
+                revoked: false
             },
             data: {
                 revoked: true
@@ -110,33 +112,20 @@ export const logout = async (userId: string, refreshToken: string) => {
 };
 
 // refresh token service
-export const refreshTokens = async (userId: string, refreshToken: string) => {
+export const refreshTokens = async (refreshToken: string) => {
     try {
+        if (!refreshToken) throw new Error(`Invalid request status code: ${apiStatusCode.NotFound}`);
         const tokenHash = hashToken(refreshToken);
-        const found = await prisma.refreshToken.findFirst({ where: { userId, tokenHash } });
+        const found = await prisma.refreshToken.findFirst({ where: { tokenHash, revoked: false } });
+        if (!found) throw new Error("Invalid refresh token");
+        const userId = found.userId;
         if (!found || found.revoked || found.expiresAt < new Date()) throw new Error("Invalid refresh token");
 
         // issue new tokens
         const newplain = randomTokenHex(64);
         const newHash = hashToken(newplain);
         const newExpiry = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000); // 30 days
-        // await prisma.refreshToken.update({
-        //     where: {
-        //         id: found.id
-        //     },
-        //     data: {
-        //         revoked: true,
-        //         replacedBy: newHash
-        //     },
-        // });
 
-        // await prisma.refreshToken.create({
-        //     data: {
-        //         userId,
-        //         tokenHash: newHash,
-        //         expiresAt: newExpiry
-        //     }
-        // });
 
         await prisma.$transaction(async (tx: any) => {
             await tx.refreshToken.update({
@@ -172,6 +161,8 @@ export const refreshTokens = async (userId: string, refreshToken: string) => {
 // Forgot password service
 export const requestForgotPassword = async (email: string) => {
     try {
+        if (!email) throw new Error(`Invalid request status code: ${apiStatusCode.NotFound}`);
+
         const user = await prisma.user.findUnique({
             where: { email }
         });
@@ -208,6 +199,7 @@ export const requestForgotPassword = async (email: string) => {
 // Reset password service
 export const resetPassword = async (userId: string, token: string, newPassword: string) => {
     try {
+        if (!userId || !token || !newPassword) throw new Error(`Invalid request status code: ${apiStatusCode.NotFound}`);
         const tokenHash = hashToken(token);
         const entry = await prisma.emailToken.findFirst({
             where: {
@@ -221,22 +213,7 @@ export const resetPassword = async (userId: string, token: string, newPassword: 
 
         // update password
         const newPasswordHash = await hashPassword(newPassword);
-        // await prisma.user.update({
-        //     where: {
-        //         id: userId
-        //     },
-        //     data: {
-        //         passwordHash: newPasswordHash
-        //     }
-        // });
-        // await prisma.emailToken.update({
-        //     where: {
-        //         id: entry.id
-        //     },
-        //     data: {
-        //         used: true
-        //     }
-        // });
+
 
         await prisma.$transaction(async (tx: any) => {
             await tx.user.update({
@@ -244,7 +221,7 @@ export const resetPassword = async (userId: string, token: string, newPassword: 
                     id: userId
                 },
                 data: {
-                    passwordHash: newPasswordHash
+                    password: newPasswordHash
                 }
             });
             await tx.emailToken.update({
@@ -265,6 +242,7 @@ export const resetPassword = async (userId: string, token: string, newPassword: 
 // Verify email service
 export const verifyEmailToken = async (userId: string, token: string) => {
     try {
+        if (!userId || !token) throw new Error(`Invalid request status code: ${apiStatusCode.NotFound}`);
         const tokenHash = hashToken(token);
         const entry = await prisma.emailToken.findFirst({
             where: {
@@ -304,6 +282,7 @@ export const verifyEmailToken = async (userId: string, token: string) => {
 // create OTP service
 export const createOtp = async (userId: string) => {
     try {
+        if (!userId) throw new Error(`Invalid request status code: ${apiStatusCode.NotFound}`);
         const otp = (Math.floor(100000 + Math.random() * 900000)).toString(); // 6-digit OTP
         const otpHash = hashToken(otp);
         await prisma.emailToken.create({
@@ -324,6 +303,7 @@ export const createOtp = async (userId: string) => {
 // verify OTP service
 export const verifyOtp = async (userId: string, otp: string) => {
     try {
+        if (!userId || !otp) throw new Error(`Invalid request status code: ${apiStatusCode.NotFound}`);
         const otpHash = hashToken(otp);
         const entry = await prisma.emailToken.findFirst({
             where: {
@@ -376,6 +356,7 @@ export const getAllUsers = async () => {
 // get user by id service
 export const getUserById = async (userId: string) => {
     try {
+        if (!userId) throw new Error(`Invalid request status code: ${apiStatusCode.NotFound}`);
         return await prisma.user.findUnique({
             where: { id: userId },
             select: {
@@ -395,10 +376,19 @@ export const getUserById = async (userId: string) => {
 };
 
 // delete user by id service
-export const deleteUserById = async (userId: string) => {
+export const deleteUserById = async (userId: string, adminId: string) => {
     try {
+        if (!userId || !adminId) throw new Error(`Invalid request status code: ${apiStatusCode.NotFound}`);
+
+        if (userId === adminId) throw new Error("Admin can't delete himself");
+
+        const admin = await prisma.user.findUnique({ where: { id: adminId } });
+        if (!admin) throw new Error("Admin not found");
+        if (admin.role !== "ADMIN") throw new Error("Admin not found");
+
         const user = await prisma.user.findUnique({ where: { id: userId } });
         if (!user) throw new Error("User not found");
+        if (user.role === "ADMIN") throw new Error("Admin can't be deleted");
 
         await prisma.$transaction(async (tx: any) => {
             await tx.emailToken.deleteMany({
@@ -411,10 +401,7 @@ export const deleteUserById = async (userId: string) => {
                 where: { id: userId }
             });
         });
-        const xUser = await prisma.user.findUnique({ where: { id: userId } });
-        if (!xUser) {
-            return true;
-        }
+        return true;
     } catch (error) {
         console.error("Delete user by id service error:", error);
         throw error;
