@@ -18,9 +18,16 @@ model User {
   isEmailVerified Boolean  @default(false)
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
-
+  lockedUntil     DateTime?      // Account lockout
+  deletedAt       DateTime?      // Soft delete (skip in queries)
   refreshTokens   RefreshToken[]
   emailTokens     EmailToken[]
+
+  @@map("users")
+  @@index([role])
+  @@index([lockedUntil])
+  @@index([deletedAt])
+  @@index([isEmailVerified])
 }
 
 model RefreshToken {

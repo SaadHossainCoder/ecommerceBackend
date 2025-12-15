@@ -1,15 +1,32 @@
 import { hashPassword, hashToken, randomTokenHex, verifyPassword } from "../utils/hash.utils"
 import { sendEmail } from "../utils/emailSend.utils"
 import { signAccessToken } from "../utils/token.utils";
-import {apiStatusCode} from "../lib/apiCode.lib";
+import { apiStatusCode } from "../lib/apiCode.lib";
 import prisma from "../prisma/client";
+
+// Custom errors
+export class AuthError extends Error {
+    constructor(message: string, public statusCode: number, public code?: string) {
+        super(message);
+        this.name = "AuthError";
+    }
+}
+
 // Signup service
-export const signup = async (username: string, email: string, password: string,  role: string) => {
+export const signup = async (username: string, email: string, password: string, role: string) => {
     try {
         if (!email || !password || !username || !role) throw new Error(`Invalid request status code: ${apiStatusCode.NotFound}`);
+
+        // Normalize email to lowercase for consistency
+        const normalizedEmail = email.toLowerCase();
+        const normalizedUsername = username.toLowerCase();
+
         const existing = await prisma.user.findFirst({
             where: {
-                OR: [{ email }, { username }]
+                OR: [
+                    { email: normalizedEmail },
+                    { username: normalizedUsername }
+                ]
             }
         })
         if (existing) throw new Error("Email or Username already in use");
@@ -17,52 +34,59 @@ export const signup = async (username: string, email: string, password: string, 
         // password hashing
         const passwordHash = await hashPassword(password);
 
-        const user = await prisma.user.create({
-            data: {
-                username,
-                email,
-                password: passwordHash,
-                role,
-            }
+
+        return await prisma.$transaction(async (tx) => {
+            const user = await tx.user.create({
+                data: {
+                    username: normalizedUsername,
+                    email: normalizedEmail,
+                    password: passwordHash,
+                    role
+                },
+                select: { id: true, username: true, email: true, role: true },
+            });
+
+            const tokenPlain = randomTokenHex(32);
+            await tx.emailToken.create({
+                data: {
+                    userId: user.id,
+                    tokenHash: hashToken(tokenPlain),
+                    purpose: "VERIFY_EMAIL",
+                    expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
+                },
+            });
+
+            // Async email (fire-and-forget)
+            // const link = `${process.env.FRONTEND_URL}/verify?uid=${user.id}&token=${tokenPlain}`;
+            // sendEmail(user.email, "Verify your email", `<p>Verify: <a href="${link}">Link</a> or code: ${tokenPlain}</p>`)
+            // .catch((err) => logger.error("Email send failed", { userId: user.id, err }));
+            return { user, tokenPlain };
         });
+    } catch (error: any) {
+        // Log the error for debugging
+        if (error?.message) {
+            console.error("Signup service error:", error.message);
+        } else {
+            console.error("Signup service error:", error);
+        }
 
-        // create verification tokenPlain 
-        const tokenPlain = randomTokenHex(32);
-        await prisma.emailToken.create({
-            data: {
-                userId: user.id,
-                tokenHash: hashToken(tokenPlain),
-                purpose: "VERIFY_EMAIL",
-                expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000) // 24 hours
-            }
-        })
+        // Re-throw clean errors
+        if (error instanceof Error) {
+            throw error;
+        }
 
-        // send verification email
-        const link = `${process.env.FRONTEND_URL}/verify?uid=${user.id}&token=${tokenPlain}`;
-        sendEmail(
-            user.email,
-            "Verify your email",
-            `<p>Please verify your email by clicking on the following link:
-            <br>
-            Email Verify code is : ${tokenPlain}
-            <br>
-            <a href="${link}">Verify Email</a>
-            </p>`
-        ).catch(console.error);
-
-        return { user, tokenPlain };
-    } catch (error) {
-        console.error("Signup service error:", error);
-        throw error;
+        // Fallback for unknown errors
+        throw new Error("An error occurred during signup");
     }
 }
 
 // login service
 export const login = async (email: string, password: string) => {
+    if (!email || !password) throw new Error(`Invalid request status code: ${apiStatusCode.NotFound}`);
+    const normalizedEmail = email.toLowerCase();
     try {
-        if (!email || !password) throw new Error(`Invalid request status code: ${apiStatusCode.NotFound}`);
         const user = await prisma.user.findFirst({
-            where: { email }
+            where: { email: normalizedEmail, deletedAt: null, lockedUntil: { lt: new Date() } }
         });
         if (!user) throw new Error("User not found");
 
@@ -382,24 +406,18 @@ export const deleteUserById = async (userId: string, adminId: string) => {
 
         if (userId === adminId) throw new Error("Admin can't delete himself");
 
-        const admin = await prisma.user.findUnique({ where: { id: adminId } });
-        if (!admin) throw new Error("Admin not found");
-        if (admin.role !== "ADMIN") throw new Error("Admin not found");
+        const [admin, user] = await Promise.all([
+            prisma.user.findUnique({ where: { id: adminId } }),
+            prisma.user.findUnique({ where: { id: userId } }),
+        ]);
+        if (!admin || admin.role !== "ADMIN") throw new AuthError("Admin required", 403);
+        if (!user) throw new AuthError("User not found", 404);
+        if (user.role === "ADMIN") throw new AuthError("Cannot delete admin", 403, "ADMIN_DELETE");
 
-        const user = await prisma.user.findUnique({ where: { id: userId } });
-        if (!user) throw new Error("User not found");
-        if (user.role === "ADMIN") throw new Error("Admin can't be deleted");
-
-        await prisma.$transaction(async (tx: any) => {
-            await tx.emailToken.deleteMany({
-                where: { userId }
-            });
-            await tx.refreshToken.deleteMany({
-                where: { userId }
-            });
-            await tx.user.delete({
-                where: { id: userId }
-            });
+        await prisma.$transaction(async (tx) => {
+            await tx.emailToken.deleteMany({ where: { userId } });
+            await tx.refreshToken.deleteMany({ where: { userId } });
+            await tx.user.update({ where: { id: userId }, data: { deletedAt: new Date() } }); // Soft delete
         });
         return true;
     } catch (error) {

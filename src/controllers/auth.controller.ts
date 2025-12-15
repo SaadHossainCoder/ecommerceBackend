@@ -8,12 +8,26 @@ export const signup = async (req: Request, res: Response) => {
     try {
         const { username, email, password, role } = req.body;
         if (!username || !email || !password || !role) {
-            return res.status(apiStatusCode.NotFound).json({ ok: false, message: " Missing field" });
+            return res.status(apiStatusCode.NotFound).json({ ok: false, message: "Missing field" });
         };
-        const { user } = await authService.signup(username, email, password, role);
+        const { user, tokenPlain } = await authService.signup(username, email, password, role);
+        
+        // Set refresh token cookie
+        // res.cookie(
+        //     CONFIG.REFRESH_COOKIE_NAME, tokenPlain,
+        //     {
+        //         httpOnly: true,
+        //         secure: CONFIG.NODE_ENV === "production",
+        //         sameSite: "lax",
+        //         maxAge: 30 * 24 * 60 * 60 * 1000
+        //     }
+        // );
+        
         return res.status(apiStatusCode.Created).json({ ok: true, user: { id: user.id, username: user.username, email: user.email, role: user.role } });
-    } catch (error) {
-        return res.status(apiStatusCode.BadRequest).json({ ok: false, message: (error as Error).message });
+    } catch (error: any) {
+        const message = error?.message || "An error occurred during signup";
+        return res.status(apiStatusCode.BadRequest).json({ ok: false, message });
+        
     }
 };
 
@@ -49,19 +63,20 @@ export const logout = async (req: Request, res: Response) => {
         const cookie = req.cookies[CONFIG.REFRESH_COOKIE_NAME];
         const userId = (req.user as any)?.sub; // Secured: get from token
 
-        if (!cookie) {
-            return res.status(apiStatusCode.NotFound).json({ ok: false, message: "Invalid request: No cookie" });
+        if (!cookie || !userId) {
+            return res.status(apiStatusCode.NotFound).json({ ok: false, message: "Invalid request: Missing cookie or authorization" });
         }
 
-        if (userId) {
-            await authService.logout(userId, cookie);
-        }
+        // Revoke refresh token in database
+        await authService.logout(userId, cookie);
 
+        // Clear refresh token cookie
         res.clearCookie(CONFIG.REFRESH_COOKIE_NAME, {
             httpOnly: true,
             secure: CONFIG.NODE_ENV === "production",
             sameSite: "lax"
         });
+        
         return res.status(apiStatusCode.Success).json({ ok: true, message: "Logged out successfully" });
     } catch (error) {
         return res.status(apiStatusCode.BadRequest).json({ ok: false, message: (error as Error).message });
@@ -109,8 +124,8 @@ export const requestForgotPassword = async (req: Request, res: Response) => {
 // reset password controller
 export const resetPassword = async (req: Request, res: Response) => {
     try {
-        const { token, password, confirmPassword } = req.body;
-        if (!token || !password || !confirmPassword) {
+        const { uid, token, password, confirmPassword } = req.body;
+        if (!uid || !token || !password || !confirmPassword) {
             return res.status(apiStatusCode.NotFound).json({ ok: false, message: "Invalid request" });
         };
         if (password !== confirmPassword) {
@@ -123,7 +138,7 @@ export const resetPassword = async (req: Request, res: Response) => {
             return res.status(apiStatusCode.NotMatched).json({ ok: false, message: "Confirm password must be at least 6 characters long" });
         };
 
-        await authService.resetPassword(token, password, confirmPassword);
+        await authService.resetPassword(uid, token, password);
         return res.status(apiStatusCode.Success).json({ ok: true, message: "Password reset successfully" });
     } catch (error) {
         return res.status(apiStatusCode.BadRequest).json({ ok: false, message: (error as Error).message });
@@ -133,11 +148,11 @@ export const resetPassword = async (req: Request, res: Response) => {
 // verify email controller
 export const verifyEmail = async (req: Request, res: Response) => {
     try {
-        const { userId, token } = req.body;
-        if (!userId || !token) {
+        const { uid, token } = req.body;
+        if (!uid || !token) {
             return res.status(apiStatusCode.NotFound).json({ ok: false, message: "Invalid request" });
         };
-        await authService.verifyEmailToken(userId, token);
+        await authService.verifyEmailToken(uid, token);
         return res.status(apiStatusCode.Success).json({ ok: true, message: "Email verified successfully" });
     } catch (error) {
         return res.status(apiStatusCode.BadRequest).json({ ok: false, message: (error as Error).message });
@@ -147,11 +162,11 @@ export const verifyEmail = async (req: Request, res: Response) => {
 // send otp controller
 export const sendOtp = async (req: Request, res: Response) => {
     try {
-        const { userId } = req.body;
-        if (!userId) {
+        const { uid } = req.body;
+        if (!uid) {
             return res.status(apiStatusCode.NotFound).json({ ok: false, message: "Invalid request" });
         };
-        const otp = await authService.createOtp(userId);
+        const otp = await authService.createOtp(uid);
         return res.status(apiStatusCode.Success).json({ ok: true, otp, message: "OTP sent successfully" });
     } catch (error) {
         return res.status(apiStatusCode.BadRequest).json({ ok: false, message: (error as Error).message });
@@ -165,10 +180,7 @@ export const verifyOtp = async (req: Request, res: Response) => {
         if (!uid || !otp) {
             return res.status(apiStatusCode.NotFound).json({ ok: false, message: "Invalid request" });
         };
-        if (otp.length !== 6) {
-            return res.status(apiStatusCode.NotMatched).json({ ok: false, message: "Invalid OTP" });
-        };
-        if (isNaN(parseInt(otp))) {
+        if (otp.length < 3) {
             return res.status(apiStatusCode.NotMatched).json({ ok: false, message: "Invalid OTP" });
         };
         await authService.verifyOtp(uid, otp);
@@ -181,11 +193,6 @@ export const verifyOtp = async (req: Request, res: Response) => {
 // get all users only admin controller
 export const getAllUsers = async (req: Request, res: Response) => {
     try {
-        const { adminId } = req.body;
-        if (!adminId) {
-            return res.status(apiStatusCode.NotFound).json({ ok: false, message: "Invalid request" });
-        };
-
         const users = await authService.getAllUsers();
         return res.status(apiStatusCode.Success).json({ ok: true, users, message: "Users fetched successfully" });
     } catch (error) {
@@ -196,7 +203,7 @@ export const getAllUsers = async (req: Request, res: Response) => {
 // get me controller
 export const getMe = async (req: Request, res: Response) => {
     try {
-        const { userId } = req.body;
+        const userId = (req.user as any)?.sub;
         if (!userId) {
             return res.status(apiStatusCode.NotFound).json({ ok: false, message: "Invalid request" });
         };
@@ -211,7 +218,8 @@ export const getMe = async (req: Request, res: Response) => {
 // delete user by id only admin controller
 export const deleteUserById = async (req: Request, res: Response) => {
     try {
-        const { adminId, userId } = req.body;
+        const adminId = (req.user as any)?.sub;
+        const { id: userId } = req.params;
         if (!adminId || !userId) {
             return res.status(apiStatusCode.NotFound).json({ ok: false, message: "Invalid request" });
         };

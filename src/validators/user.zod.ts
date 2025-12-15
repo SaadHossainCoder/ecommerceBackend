@@ -1,52 +1,43 @@
 import { z } from 'zod';
 
-interface SignupInput {
-    username: string;
-    email: string;
-    password: string;
-    role: string;
-}
-
-interface LoginInput {
-    identifier: string;
-    password: string;
-}
-
 export const signupSchema = z.object({
-    username: z.string().min(3).max(30),
-    email: z.string().email(),
-    password: z.string().min(6),
-    role: z.enum(["USER", "ADMIN"])
-}) as z.ZodSchema<SignupInput>;
+    body: z.object({
+        username: z.string().min(3, "Username must be at least 3 characters").max(30, "Username must be at most 30 characters").toLowerCase(),
+        email: z.string().email("Invalid email format").toLowerCase(),
+        password: z.string().min(6, "Password must be at least 6 characters"),
+        role: z.enum(["user", "admin", "USER", "ADMIN"]).default("user").transform((val) => val.toUpperCase())
+    })
+});
 
 export const loginSchema = z.object({
     body: z.object({
-        identifier: z.string().min(1),
-        password: z.string().min(1),
+        email: z.string().email("Invalid email format").toLowerCase(),
+        password: z.string().min(1, "Password is required"),
     })
-}) as z.ZodSchema<{ body: LoginInput }>;
+});
 
 export type SignupSchemaType = z.infer<typeof signupSchema>;
 export type LoginSchemaType = z.infer<typeof loginSchema>;
 
 export const verifySchema = z.object({
     body: z.object({
-        uid: z.string().min(1),
-        token: z.string().min(1)
+        uid: z.string().min(1, "User ID is required"),
+        token: z.string().min(1, "Token is required")
     })
 });
 
 export const forgotSchema = z.object({
     body: z.object({
-        email: z.string().email()
+        email: z.string().email("Invalid email format").toLowerCase()
     })
 });
 
 export const resetSchema = z.object({
     body: z.object({
-        token: z.string().min(1),
-        password: z.string().min(6),
-        confirmPassword: z.string().min(6)
+        uid: z.string().min(1, "User ID is required"),
+        token: z.string().min(1, "Token is required"),
+        password: z.string().min(6, "Password must be at least 6 characters"),
+        confirmPassword: z.string().min(6, "Confirm password must be at least 6 characters")
     }).refine((data) => data.password === data.confirmPassword, {
         message: "Passwords do not match",
         path: ["confirmPassword"]
@@ -55,13 +46,13 @@ export const resetSchema = z.object({
 
 export const otpSendSchema = z.object({
     body: z.object({
-        uid: z.string().min(1)
+        uid: z.string().min(1, "User ID is required")
     })
 });
 
 export const otpVerifySchema = z.object({
     body: z.object({
-        uid: z.string().min(1),
-        otp: z.string().min(3)
+        uid: z.string().min(1, "User ID is required"),
+        otp: z.string().min(3, "OTP is required")
     })
 });
