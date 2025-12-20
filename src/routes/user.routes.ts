@@ -7,21 +7,21 @@ import rateLimit from "express-rate-limit";
 
 
 
-const router = Router();
+const userRouter = Router();
 
-router.post("/signup", rateLimit({ windowMs: 15 * 60 * 1000, max: 5 }) , validateZod(z.signupSchema), userController.signup);
-router.post("/login",rateLimit({ windowMs: 15 * 60 * 1000, max: 5 }), validateZod(z.loginSchema), userController.login);
-router.post("/logout", authGuard(), userController.logout);
-router.post("/refresh", userController.refresh);
-router.post("/forgot", validateZod(z.forgotSchema), userController.requestForgotPassword);
-router.post("/reset", validateZod(z.resetSchema), userController.resetPassword);
-router.post("/verify", validateZod(z.verifySchema), userController.verifyEmail);
-router.post("/otp/send", validateZod(z.otpSendSchema), userController.sendOtp);
-router.post("/otp/verify", validateZod(z.otpVerifySchema), userController.verifyOtp);
-router.get("/me", authGuard(), userController.getMe);
+userRouter.post("/signup", rateLimit({ windowMs: 15 * 60 * 1000, max: 5 }) , validateZod(z.signupSchema), userController.signup);
+userRouter.post("/login",rateLimit({ windowMs: 15 * 60 * 1000, max: 5 }), validateZod(z.loginSchema), userController.login);
+userRouter.post("/logout", authGuard(), userController.logout);
+userRouter.post("/refresh", userController.refresh);
+userRouter.post("/forgot", validateZod(z.forgotSchema), userController.requestForgotPassword);
+userRouter.post("/reset", validateZod(z.resetSchema), userController.resetPassword);
+userRouter.post("/verify", validateZod(z.verifySchema), userController.verifyEmail);
+userRouter.post("/otp/send", validateZod(z.otpSendSchema), userController.sendOtp);
+userRouter.post("/otp/verify", validateZod(z.otpVerifySchema), userController.verifyOtp);
+userRouter.get("/me", authGuard(), userController.getMe);
 
 // admin routes
-router.get("/users", authGuard(['ADMIN']), userController.getAllUsers);
-router.delete("/user/:id", authGuard(['ADMIN']), userController.deleteUserById);
+userRouter.get("/users", authGuard(['ADMIN']), userController.getAllUsers);
+userRouter.delete("/user/:id", authGuard(['ADMIN']), userController.deleteUserById);
 
-export default router;
+export default userRouter;

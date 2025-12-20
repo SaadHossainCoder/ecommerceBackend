@@ -3,6 +3,7 @@ import { sendEmail } from "../utils/emailSend.utils"
 import { signAccessToken } from "../utils/token.utils";
 import { apiStatusCode } from "../lib/apiCode.lib";
 import prisma from "../prisma/client";
+import logger from "../lib/logger";
 
 // Custom errors
 export class AuthError extends Error {
@@ -14,12 +15,11 @@ export class AuthError extends Error {
 
 // Signup service
 export const signup = async (username: string, email: string, password: string, role: string) => {
+    const normalizedEmail = email.toLowerCase();
+    const normalizedUsername = username.toLowerCase();
     try {
         if (!email || !password || !username || !role) throw new Error(`Invalid request status code: ${apiStatusCode.NotFound}`);
 
-        // Normalize email to lowercase for consistency
-        const normalizedEmail = email.toLowerCase();
-        const normalizedUsername = username.toLowerCase();
 
         const existing = await prisma.user.findFirst({
             where: {
@@ -38,10 +38,10 @@ export const signup = async (username: string, email: string, password: string, 
         return await prisma.$transaction(async (tx) => {
             const user = await tx.user.create({
                 data: {
-                    username: normalizedUsername,
-                    email: normalizedEmail,
-                    password: passwordHash,
-                    role
+                    username: normalizedUsername.trim(),
+                    email: normalizedEmail.trim(),
+                    password: passwordHash.trim(),
+                    role,
                 },
                 select: { id: true, username: true, email: true, role: true },
             });
@@ -60,10 +60,14 @@ export const signup = async (username: string, email: string, password: string, 
             // const link = `${process.env.FRONTEND_URL}/verify?uid=${user.id}&token=${tokenPlain}`;
             // sendEmail(user.email, "Verify your email", `<p>Verify: <a href="${link}">Link</a> or code: ${tokenPlain}</p>`)
             // .catch((err) => logger.error("Email send failed", { userId: user.id, err }));
-            return { user, tokenPlain };
+            // const accessToken = signAccessToken({ sub: user.id, role: user.role });
+
+            logger.info("User signed up", { userId: user.id, role });
+            return { user, tokenPlain};
         });
     } catch (error: any) {
         // Log the error for debugging
+        logger.error("Signup failed", { email: normalizedEmail, error: (error as Error).message });
         if (error?.message) {
             console.error("Signup service error:", error.message);
         } else {
@@ -82,20 +86,28 @@ export const signup = async (username: string, email: string, password: string, 
 
 // login service
 export const login = async (email: string, password: string) => {
-    if (!email || !password) throw new Error(`Invalid request status code: ${apiStatusCode.NotFound}`);
+    if (!email || !password) throw new AuthError("Email and password are required", apiStatusCode.BadRequest);
     const normalizedEmail = email.toLowerCase();
     try {
+        console.log(email, password);
+
         const user = await prisma.user.findFirst({
-            where: { email: normalizedEmail, deletedAt: null, lockedUntil: { lt: new Date() } }
+            where: {
+                email: normalizedEmail
+            }
         });
-        if (!user) throw new Error("User not found");
 
         // password verification
-        const isPasswordValid = await verifyPassword(password, user.password);
-        if (!isPasswordValid) throw new Error("Invalid email/username or password");
+        // To prevent user enumeration, we check for user existence and password validity
+        // in a way that doesn't reveal which one failed.
+        const isPasswordValid = user ? await verifyPassword(password, user.password) : false;
+        console.log("isPasswordValid", isPasswordValid);
+        // console.log("user", user);
+        if (!user || !isPasswordValid) throw new AuthError("Invalid email or password", apiStatusCode.Unauthorized, "INVALID_CREDENTIALS");
 
         // access token
         const accessToken = signAccessToken({ sub: user.id, role: user.role });
+
         // create refresh token
         const refreshPlain = randomTokenHex(64);
         const refreshHash = hashToken(refreshPlain);
@@ -107,9 +119,13 @@ export const login = async (email: string, password: string) => {
             }
         });
 
+        logger.info("User logged in", { userId: user.id });
         return { user, accessToken, refreshToken: refreshPlain };
-    } catch (error) {
-        console.error("Login service error:", error);
+    } catch (error: any) {
+        logger.error("Login failed", { email, error: error.message });
+        if (!(error instanceof AuthError)) {
+            console.error("Login service error:", error);
+        }
         throw error;
     }
 };
@@ -117,21 +133,39 @@ export const login = async (email: string, password: string) => {
 // logout service
 export const logout = async (userId: string, refreshToken: string) => {
     try {
-        if (!userId || !refreshToken) throw new Error(`Invalid request status code: ${apiStatusCode.NotFound}`);
+        if (!userId || !refreshToken) throw new AuthError("Missing userId or refreshToken", apiStatusCode.BadRequest);
+        
         const tokenHash = hashToken(refreshToken);
-        await prisma.refreshToken.updateMany({
+        
+        // Verify token exists and belongs to user
+        const tokenExists = await prisma.refreshToken.findFirst({
             where: {
                 userId,
                 tokenHash,
                 revoked: false
-            },
-            data: {
-                revoked: true
             }
         });
+        
+        if (!tokenExists) {
+            throw new AuthError("Invalid or already revoked refresh token", apiStatusCode.Unauthorized, "INVALID_TOKEN");
+        }
+        
+        // Revoke the token
+        const result = await prisma.refreshToken.update({
+            where: { id: tokenExists.id },
+            data: { revoked: true }
+        });
+        
+        logger.info("User logged out", { userId, tokenId: result.id });
+        return true;
     } catch (error) {
+        if (error instanceof AuthError) {
+            logger.warn("Logout failed", { userId, error: (error as Error).message });
+            throw error;
+        }
         console.error("Logout service error:", error);
-        throw error;
+        logger.error("Logout service error:", error);
+        throw new AuthError("Failed to logout", apiStatusCode.BadRequest);
     }
 };
 
@@ -145,6 +179,17 @@ export const refreshTokens = async (refreshToken: string) => {
         const userId = found.userId;
         if (!found || found.revoked || found.expiresAt < new Date()) throw new Error("Invalid refresh token");
 
+        // Verify user still exists in the database
+        const user = await prisma.user.findUnique({ where: { id: userId } });
+        if (!user || user.deletedAt) {
+            // Revoke the orphaned refresh token
+            await prisma.refreshToken.update({
+                where: { id: found.id },
+                data: { revoked: true }
+            });
+            throw new Error("User not found");
+        }
+
         // issue new tokens
         const newplain = randomTokenHex(64);
         const newHash = hashToken(newplain);
@@ -152,6 +197,7 @@ export const refreshTokens = async (refreshToken: string) => {
 
 
         await prisma.$transaction(async (tx: any) => {
+            // Revoke the old token
             await tx.refreshToken.update({
                 where: {
                     id: found.id
@@ -162,11 +208,28 @@ export const refreshTokens = async (refreshToken: string) => {
                 },
             });
 
+            // Create the new token
             await tx.refreshToken.create({
                 data: {
                     userId,
                     tokenHash: newHash,
                     expiresAt: newExpiry
+                }
+            });
+
+            // Cleanup old refresh tokens for this user
+            // Delete expired tokens and revoked tokens older than 7 days
+            const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+            await tx.refreshToken.deleteMany({
+                where: {
+                    userId,
+                    OR: [
+                        { expiresAt: { lt: new Date() } }, // Expired tokens
+                        {
+                            revoked: true,
+                            updatedAt: { lt: sevenDaysAgo } // Revoked tokens older than 7 days
+                        }
+                    ]
                 }
             });
         }

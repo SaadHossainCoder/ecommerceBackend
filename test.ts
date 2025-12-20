@@ -24,7 +24,7 @@ export const signup = async (req: TypedRequest<z.infer<typeof signupSchema>>, re
     next(error);
   }
 };
-
+ 
 export const login = async (req: TypedRequest<z.infer<typeof loginSchema>>, res: Response, next: NextFunction) => {
   try {
     const parsed = loginSchema.parse(req.body);
@@ -33,7 +33,7 @@ export const login = async (req: TypedRequest<z.infer<typeof loginSchema>>, res:
     sendResponse(res, apiStatusCode.Created, true, { user, accessToken }, "Login successful");
   } catch (error) {
     next(error);
-  }
+  } 
 };
 
 export const logout = async (req: TypedRequest, res: Response, next: NextFunction) => {

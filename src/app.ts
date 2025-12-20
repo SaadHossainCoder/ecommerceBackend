@@ -2,12 +2,13 @@ import express from "express";
 import cors from "cors";
 import helmet from "helmet";
 import hpp from "hpp";
-import { aj } from "./config/arcjet";
+// import { aj } from "./config/arcjet";
 import { rateLimit } from "express-rate-limit";
 import { errorHandler } from "./middleware/error-handler.middleware";
-import userRoutes from "./routes/user.routes";
 import cookieParser from 'cookie-parser';
-import {apiStatusCode} from "./lib/apiCode.lib";
+// import { apiStatusCode } from "./lib/apiCode.lib";
+import logger from "./lib/logger";
+import rootRouter from "./routes/allRoutes";
 
 const app = express();
 
@@ -71,9 +72,22 @@ app.use(limiter);
 // });
 
 // ======================================================
-// 5. 🚀 Test Route
+// 5. 🚀  Route
 // ======================================================
-app.use("/api/users", userRoutes);
+app.use("/api", rootRouter);
+
+
+// ======================================================
+// 6. 📜 logger Handler
+// ======================================================
+app.use((req, res, next) => {
+    const start = Date.now();
+    res.on('finish', () => {
+        const duration = Date.now() - start;
+        logger.http(`${req.method} ${req.url} ${res.statusCode} - ${duration}ms`, { ip: req.ip });
+    });
+    next();
+});
 
 
 // ======================================================

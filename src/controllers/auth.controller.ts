@@ -1,7 +1,7 @@
 import { Request, Response } from "express";
 import * as authService from "../Services/auth.service";
 import { CONFIG } from "../config/constants";
-import {apiStatusCode} from "../lib/apiCode.lib";
+import { apiStatusCode } from "../lib/apiCode.lib";
 
 // signup controller
 export const signup = async (req: Request, res: Response) => {
@@ -11,23 +11,23 @@ export const signup = async (req: Request, res: Response) => {
             return res.status(apiStatusCode.NotFound).json({ ok: false, message: "Missing field" });
         };
         const { user, tokenPlain } = await authService.signup(username, email, password, role);
-        
+
         // Set refresh token cookie
-        // res.cookie(
-        //     CONFIG.REFRESH_COOKIE_NAME, tokenPlain,
-        //     {
-        //         httpOnly: true,
-        //         secure: CONFIG.NODE_ENV === "production",
-        //         sameSite: "lax",
-        //         maxAge: 30 * 24 * 60 * 60 * 1000
-        //     }
-        // );
-        
+        res.cookie(
+            CONFIG.REFRESH_COOKIE_NAME, tokenPlain,
+            {
+                httpOnly: true,
+                secure: CONFIG.NODE_ENV === "production",
+                sameSite: "lax",
+                maxAge: 30 * 24 * 60 * 60 * 1000
+            }
+        );
+
         return res.status(apiStatusCode.Created).json({ ok: true, user: { id: user.id, username: user.username, email: user.email, role: user.role } });
     } catch (error: any) {
         const message = error?.message || "An error occurred during signup";
         return res.status(apiStatusCode.BadRequest).json({ ok: false, message });
-        
+
     }
 };
 
@@ -38,22 +38,22 @@ export const login = async (req: Request, res: Response) => {
         if (!email || !password) {
             return res.status(apiStatusCode.NotFound).json({ ok: false, message: "Invalid request" });
         };
+
         const { user, accessToken, refreshToken } = await authService.login(email, password);
+
+        if (!refreshToken || !user || !accessToken) {
+            return res.status(apiStatusCode.NotFound).json({ ok: false, message: "Invalid request" });
+        }
+
         res.cookie(
             CONFIG.REFRESH_COOKIE_NAME, refreshToken,
             {
-                httpOnly: true,
-                secure: CONFIG.NODE_ENV === "production", sameSite: "lax",
-                maxAge: 30 * 24 * 60 * 60 * 1000
-            }
-        );
-        return res.status(apiStatusCode.Created).json({
-            ok: true,
-            user: { id: user.id, username: user.username, email: user.email, role: user.role },
-            accessToken
-        });
+                httpOnly: true, secure: process.env.NODE_ENV === "production", sameSite: "lax", maxAge: 30 * 24 * 60 * 60 * 1000
+            });
+
+        return res.status(apiStatusCode.Success).json({ ok: true, user: { id: user.id, username: user.username, email: user.email, role: user.role }, accessToken });
     } catch (error) {
-        return res.status(400).json({ ok: false, message: (error as Error).message });
+        return res.status(apiStatusCode.BadRequest).json({ ok: false, message: (error as Error).message });
     }
 };
 
@@ -64,22 +64,25 @@ export const logout = async (req: Request, res: Response) => {
         const userId = (req.user as any)?.sub; // Secured: get from token
 
         if (!cookie || !userId) {
-            return res.status(apiStatusCode.NotFound).json({ ok: false, message: "Invalid request: Missing cookie or authorization" });
+            return res.status(apiStatusCode.Unauthorized).json({ ok: false, message: "Invalid request: Missing cookie or authorization" });
         }
 
         // Revoke refresh token in database
         await authService.logout(userId, cookie);
 
-        // Clear refresh token cookie
+        // Clear refresh token cookie (only after successful revocation)
         res.clearCookie(CONFIG.REFRESH_COOKIE_NAME, {
             httpOnly: true,
             secure: CONFIG.NODE_ENV === "production",
             sameSite: "lax"
         });
-        
+
         return res.status(apiStatusCode.Success).json({ ok: true, message: "Logged out successfully" });
-    } catch (error) {
-        return res.status(apiStatusCode.BadRequest).json({ ok: false, message: (error as Error).message });
+    } catch (error: any) {
+        // Return appropriate status code based on error type
+        const statusCode = error?.statusCode || apiStatusCode.BadRequest;
+        const message = error?.message || "Failed to logout";
+        return res.status(statusCode).json({ ok: false, message });
     }
 };
 
