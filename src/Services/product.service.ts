@@ -1,5 +1,6 @@
 import prisma from "../prisma/client";
 import { Prisma } from "@prisma/client";
+import { apiStatusCode } from "../lib/apiCode.lib";
 
 // Custom error class
 export class ProductError extends Error {
@@ -19,21 +20,21 @@ export const createProduct = async (data: {
     slug: string;
     description: string;
     longDescription: string;
-    brand?: string;
+    vendorId: string;
     sku: string;
     discount?: number;
     categoryId: string;
     featured?: boolean;
     images?: Array<{ url?: string; public_url?: string }>;
-    description_images?: Array<{ url?: string; public_url?: string }>;
+    descriptionImages?: Array<{ url?: string; public_url?: string }>;
     sizes?: Array<{ size: string; qty: number; price: number }>;
     subProducts?: Array<any>;
     ingredients?: any;
 }) => {
     try {
         // Validate required fields
-        if (!data.title || !data.slug || !data.description || !data.sku || !data.categoryId || !data.longDescription || !data.images || !data.description_images || !data.sizes) {
-            throw new ProductError("Missing required fields", 400, "MISSING_FIELDS");
+        if (!data.title || !data.slug || !data.description || !data.sku || !data.categoryId || !data.longDescription || !data.images || !data.descriptionImages || !data.sizes) {
+            throw new ProductError("Missing required fields", apiStatusCode.BadRequest, "MISSING_FIELDS");
         }
 
         // Check if category exists
@@ -41,7 +42,7 @@ export const createProduct = async (data: {
             where: { id: data.categoryId }
         });
         if (!category) {
-            throw new ProductError("Category not found", 404, "CATEGORY_NOT_FOUND");
+            throw new ProductError("Category not found", apiStatusCode.NotFound, "CATEGORY_NOT_FOUND");
         }
 
         // Check for duplicate slug or SKU
@@ -54,7 +55,7 @@ export const createProduct = async (data: {
             }
         });
         if (existing) {
-            throw new ProductError("Product slug or SKU already exists", 409, "DUPLICATE_PRODUCT");
+            throw new ProductError("Product slug or SKU already exists", apiStatusCode.Conflict, "DUPLICATE_PRODUCT");
         }
 
         const product = await prisma.product.create({
@@ -63,13 +64,13 @@ export const createProduct = async (data: {
                 slug: data.slug.toLowerCase().trim(),
                 description: data.description.trim(),
                 longDescription: data.longDescription.trim(),
-                brand: data.brand?.trim(),
+                vendorId: data.vendorId?.trim(),
                 sku: data.sku.toUpperCase().trim(),
                 categoryId: data.categoryId,
                 featured: data.featured || false,
                 discount: data.discount || 0,
                 images: data.images || [],
-                description_images: data.description_images || [],
+                descriptionImages: data.descriptionImages || [],
                 sizes: data.sizes || [],
                 subProducts: data.subProducts || [],
                 ingredients: data.ingredients || null,
@@ -85,7 +86,7 @@ export const createProduct = async (data: {
     } catch (error: any) {
         if (error instanceof ProductError) throw error;
         console.error("Create product error:", error);
-        throw new ProductError(error?.message || "Failed to create product", 500);
+        throw new ProductError(error?.message || "Failed to create product", apiStatusCode.InternalServerError);
     }
 };
 
@@ -116,7 +117,7 @@ export const getAllProducts = async (options: {
                 OR: [
                     { title: { contains: options.search, mode: "insensitive" } },
                     { description: { contains: options.search, mode: "insensitive" } },
-                    { brand: { contains: options.search, mode: "insensitive" } },
+                    { vendorId: { contains: options.search, mode: "insensitive" } },
                 ]
             })
         };
@@ -173,7 +174,7 @@ export const getAllProducts = async (options: {
         };
     } catch (error: any) {
         console.error("Get all products error:", error);
-        throw new ProductError(error?.message || "Failed to fetch products", 500);
+        throw new ProductError(error?.message || "Failed to fetch products", apiStatusCode.InternalServerError);
     }
 };
 
@@ -183,7 +184,7 @@ export const getAllProducts = async (options: {
 export const getProductById = async (id: string) => {
     try {
         if (!id) {
-            throw new ProductError("Product ID is required", 400, "MISSING_ID");
+            throw new ProductError("Product ID is required", apiStatusCode.BadRequest, "MISSING_ID");
         }
 
         const product = await prisma.product.findFirst({
@@ -205,14 +206,14 @@ export const getProductById = async (id: string) => {
         });
 
         if (!product) {
-            throw new ProductError("Product not found", 404, "PRODUCT_NOT_FOUND");
+            throw new ProductError("Product not found", apiStatusCode.NotFound, "PRODUCT_NOT_FOUND");
         }
 
         return product;
     } catch (error: any) {
         if (error instanceof ProductError) throw error;
         console.error("Get product by ID error:", error);
-        throw new ProductError(error?.message || "Failed to fetch product", 500);
+        throw new ProductError(error?.message || "Failed to fetch product", apiStatusCode.InternalServerError);
     }
 };
 
@@ -222,7 +223,7 @@ export const getProductById = async (id: string) => {
 export const getProductBySlug = async (slug: string) => {
     try {
         if (!slug) {
-            throw new ProductError("Product slug is required", 400, "MISSING_SLUG");
+            throw new ProductError("Product slug is required", apiStatusCode.BadRequest, "MISSING_SLUG");
         }
 
         const product = await prisma.product.findFirst({
@@ -244,14 +245,15 @@ export const getProductBySlug = async (slug: string) => {
         });
 
         if (!product) {
-            throw new ProductError("Product not found", 404, "PRODUCT_NOT_FOUND");
+            throw new ProductError("Product not found", apiStatusCode.NotFound, "PRODUCT_NOT_FOUND");
         }
 
         return product;
+        
     } catch (error: any) {
         if (error instanceof ProductError) throw error;
         console.error("Get product by slug error:", error);
-        throw new ProductError(error?.message || "Failed to fetch product", 500);
+        throw new ProductError(error?.message || "Failed to fetch product", apiStatusCode.InternalServerError);
     }
 };
 
@@ -274,7 +276,7 @@ export const getFeaturedProducts = async (limit: number = 6) => {
         return products;
     } catch (error: any) {
         console.error("Get featured products error:", error);
-        throw new ProductError(error?.message || "Failed to fetch featured products", 500);
+        throw new ProductError(error?.message || "Failed to fetch featured products", apiStatusCode.InternalServerError);
     }
 };
 
@@ -284,7 +286,7 @@ export const getFeaturedProducts = async (limit: number = 6) => {
 export const searchProducts = async (query: string, limit: number = 20) => {
     try {
         if (!query || query.trim().length < 2) {
-            throw new ProductError("Search query must be at least 2 characters", 400, "INVALID_SEARCH");
+            throw new ProductError("Search query must be at least 2 characters", apiStatusCode.BadRequest, "INVALID_SEARCH");
         }
 
         const products = await prisma.product.findMany({
@@ -293,7 +295,7 @@ export const searchProducts = async (query: string, limit: number = 20) => {
                 OR: [
                     { title: { contains: query, mode: "insensitive" } },
                     { description: { contains: query, mode: "insensitive" } },
-                    { brand: { contains: query, mode: "insensitive" } },
+                    { vendorId: { contains: query, mode: "insensitive" } },
                     { sku: { contains: query, mode: "insensitive" } },
                 ]
             },
@@ -302,7 +304,7 @@ export const searchProducts = async (query: string, limit: number = 20) => {
                 id: true,
                 title: true,
                 slug: true,
-                brand: true,
+                vendorId: true,
                 sku: true,
                 images: true,
                 rating: true
@@ -313,7 +315,7 @@ export const searchProducts = async (query: string, limit: number = 20) => {
     } catch (error: any) {
         if (error instanceof ProductError) throw error;
         console.error("Search products error:", error);
-        throw new ProductError(error?.message || "Failed to search products", 500);
+        throw new ProductError(error?.message || "Failed to search products", apiStatusCode.InternalServerError);
     }
 };
 
@@ -327,19 +329,19 @@ export const updateProduct = async (id: string, data: Partial<{
     slug: string;
     description: string;
     longDescription: string;
-    brand: string;
+    vendorId: string;
     discount: number;
     featured: boolean;
     categoryId: string;
     images: Array<{ url?: string; public_url?: string }>;
-    description_images: Array<{ url?: string; public_url?: string }>;
+    descriptionImages: Array<{ url?: string; public_url?: string }>;
     sizes: Array<{ size: string; qty: number; price: number }>;
     subProducts: Array<any>;
     ingredients: any;
 }>) => {
     try {
         if (!id) {
-            throw new ProductError("Product ID is required", 400, "MISSING_ID");
+            throw new ProductError("Product ID is required", apiStatusCode.BadRequest, "MISSING_ID");
         }
 
         // Check product exists
@@ -347,7 +349,7 @@ export const updateProduct = async (id: string, data: Partial<{
             where: { id }
         });
         if (!product) {
-            throw new ProductError("Product not found", 404, "PRODUCT_NOT_FOUND");
+            throw new ProductError("Product not found", apiStatusCode.NotFound, "PRODUCT_NOT_FOUND");
         }
 
         // Check category if provided
@@ -356,7 +358,7 @@ export const updateProduct = async (id: string, data: Partial<{
                 where: { id: data.categoryId }
             });
             if (!category) {
-                throw new ProductError("Category not found", 404, "CATEGORY_NOT_FOUND");
+                throw new ProductError("Category not found", apiStatusCode.NotFound, "CATEGORY_NOT_FOUND");
             }
         }
 
@@ -369,7 +371,7 @@ export const updateProduct = async (id: string, data: Partial<{
                 }
             });
             if (existing) {
-                throw new ProductError("Product slug already exists", 409, "DUPLICATE_SLUG");
+                throw new ProductError("Product slug already exists", apiStatusCode.Conflict, "DUPLICATE_SLUG");
             }
         }
 
@@ -378,12 +380,12 @@ export const updateProduct = async (id: string, data: Partial<{
         if (data.slug) updateData.slug = data.slug.toLowerCase().trim();
         if (data.description) updateData.description = data.description.trim();
         if (data.longDescription) updateData.longDescription = data.longDescription.trim();
-        if (data.brand !== undefined) updateData.brand = data.brand ? data.brand.trim() : null;
+        if (data.vendorId !== undefined) updateData.vendorId = data.vendorId;
         if (data.discount !== undefined) updateData.discount = Math.max(0, Math.min(100, data.discount));
         if (data.featured !== undefined) updateData.featured = data.featured;
         if (data.categoryId) updateData.categoryId = data.categoryId;
         if (data.images) updateData.images = data.images;
-        if (data.description_images) updateData.description_images = data.description_images;
+        if (data.descriptionImages) updateData.descriptionImages = data.descriptionImages;
         if (data.sizes) updateData.sizes = data.sizes;
         if (data.subProducts) updateData.subProducts = data.subProducts;
         if (data.ingredients !== undefined) updateData.ingredients = data.ingredients;
@@ -402,7 +404,7 @@ export const updateProduct = async (id: string, data: Partial<{
     } catch (error: any) {
         if (error instanceof ProductError) throw error;
         console.error("Update product error:", error);
-        throw new ProductError(error?.message || "Failed to update product", 500);
+        throw new ProductError(error?.message || "Failed to update product", apiStatusCode.InternalServerError);
     }
 };
 
@@ -414,14 +416,14 @@ export const updateProduct = async (id: string, data: Partial<{
 export const deleteProduct = async (id: string) => {
     try {
         if (!id) {
-            throw new ProductError("Product ID is required", 400, "MISSING_ID");
+            throw new ProductError("Product ID is required", apiStatusCode.BadRequest, "MISSING_ID");
         }
 
         const product = await prisma.product.findUnique({
             where: { id }
         });
         if (!product) {
-            throw new ProductError("Product not found", 404, "PRODUCT_NOT_FOUND");
+            throw new ProductError("Product not found", apiStatusCode.NotFound, "PRODUCT_NOT_FOUND");
         }
 
         const deleted = await prisma.product.update({
@@ -433,7 +435,7 @@ export const deleteProduct = async (id: string) => {
     } catch (error: any) {
         if (error instanceof ProductError) throw error;
         console.error("Delete product error:", error);
-        throw new ProductError(error?.message || "Failed to delete product", 500);
+        throw new ProductError(error?.message || "Failed to delete product", apiStatusCode.InternalServerError);
     }
 };
 
@@ -443,7 +445,7 @@ export const deleteProduct = async (id: string) => {
 export const permanentlyDeleteProduct = async (id: string) => {
     try {
         if (!id) {
-            throw new ProductError("Product ID is required", 400, "MISSING_ID");
+            throw new ProductError("Product ID is required", apiStatusCode.BadRequest, "MISSING_ID");
         }
 
         // Delete related records first
@@ -457,10 +459,10 @@ export const permanentlyDeleteProduct = async (id: string) => {
         return { message: "Product permanently deleted successfully" };
     } catch (error: any) {
         if (error?.code === 'P2025') {
-            throw new ProductError("Product not found", 404, "PRODUCT_NOT_FOUND");
+            throw new ProductError("Product not found", apiStatusCode.NotFound, "PRODUCT_NOT_FOUND");
         }
         console.error("Permanently delete product error:", error);
-        throw new ProductError(error?.message || "Failed to delete product", 500);
+        throw new ProductError(error?.message || "Failed to delete product", apiStatusCode.InternalServerError);
     }
 };
 
@@ -475,15 +477,15 @@ export const addProductReview = async (productId: string, userId: string, data: 
 }) => {
     try {
         if (!productId || !userId) {
-            throw new ProductError("Product ID and User ID are required", 400, "MISSING_IDS");
+            throw new ProductError("Product ID and User ID are required", apiStatusCode.BadRequest, "MISSING_IDS");
         }
 
         if (!data.rating || data.rating < 1 || data.rating > 5) {
-            throw new ProductError("Rating must be between 1 and 5", 400, "INVALID_RATING");
+            throw new ProductError("Rating must be between 1 and 5", apiStatusCode.BadRequest, "INVALID_RATING");
         }
 
         if (!data.comment || data.comment.trim().length < 5) {
-            throw new ProductError("Comment must be at least 5 characters", 400, "INVALID_COMMENT");
+            throw new ProductError("Comment must be at least 5 characters", apiStatusCode.BadRequest, "INVALID_COMMENT");
         }
 
         // Check product and user exist
@@ -493,10 +495,10 @@ export const addProductReview = async (productId: string, userId: string, data: 
         ]);
 
         if (!product) {
-            throw new ProductError("Product not found", 404, "PRODUCT_NOT_FOUND");
+            throw new ProductError("Product not found", apiStatusCode.NotFound, "PRODUCT_NOT_FOUND");
         }
         if (!user) {
-            throw new ProductError("User not found", 404, "USER_NOT_FOUND");
+            throw new ProductError("User not found", apiStatusCode.NotFound, "USER_NOT_FOUND");
         }
 
         // Check if user already reviewed this product
@@ -505,7 +507,7 @@ export const addProductReview = async (productId: string, userId: string, data: 
         });
 
         if (existingReview) {
-            throw new ProductError("You have already reviewed this product", 409, "DUPLICATE_REVIEW");
+            throw new ProductError("You have already reviewed this product", apiStatusCode.Conflict, "DUPLICATE_REVIEW");
         }
 
         const review = await prisma.productReview.create({
@@ -529,7 +531,7 @@ export const addProductReview = async (productId: string, userId: string, data: 
     } catch (error: any) {
         if (error instanceof ProductError) throw error;
         console.error("Add review error:", error);
-        throw new ProductError(error?.message || "Failed to add review", 500);
+        throw new ProductError(error?.message || "Failed to add review", apiStatusCode.InternalServerError);
     }
 };
 
@@ -542,7 +544,7 @@ export const getProductReviews = async (productId: string, options: {
 } = {}) => {
     try {
         if (!productId) {
-            throw new ProductError("Product ID is required", 400, "MISSING_ID");
+            throw new ProductError("Product ID is required", apiStatusCode.BadRequest, "MISSING_ID");
         }
 
         const page = Math.max(1, options.page || 1);
@@ -578,7 +580,7 @@ export const getProductReviews = async (productId: string, options: {
     } catch (error: any) {
         if (error instanceof ProductError) throw error;
         console.error("Get reviews error:", error);
-        throw new ProductError(error?.message || "Failed to fetch reviews", 500);
+        throw new ProductError(error?.message || "Failed to fetch reviews", apiStatusCode.InternalServerError);
     }
 };
 
@@ -588,7 +590,7 @@ export const getProductReviews = async (productId: string, options: {
 export const deleteProductReview = async (reviewId: string, userId: string) => {
     try {
         if (!reviewId || !userId) {
-            throw new ProductError("Review ID and User ID are required", 400, "MISSING_IDS");
+            throw new ProductError("Review ID and User ID are required", apiStatusCode.BadRequest, "MISSING_IDS");
         }
 
         const review = await prisma.productReview.findUnique({
@@ -596,12 +598,12 @@ export const deleteProductReview = async (reviewId: string, userId: string) => {
         });
 
         if (!review) {
-            throw new ProductError("Review not found", 404, "REVIEW_NOT_FOUND");
+            throw new ProductError("Review not found", apiStatusCode.NotFound, "REVIEW_NOT_FOUND");
         }
 
         // Check if user is the review author
         if (review.userId !== userId) {
-            throw new ProductError("You can only delete your own reviews", 403, "FORBIDDEN");
+            throw new ProductError("You can only delete your own reviews", apiStatusCode.NotMatched, "FORBIDDEN");
         }
 
         await prisma.productReview.update({
@@ -616,7 +618,7 @@ export const deleteProductReview = async (reviewId: string, userId: string) => {
     } catch (error: any) {
         if (error instanceof ProductError) throw error;
         console.error("Delete review error:", error);
-        throw new ProductError(error?.message || "Failed to delete review", 500);
+        throw new ProductError(error?.message || "Failed to delete review", apiStatusCode.InternalServerError);
     }
 };
 
@@ -650,7 +652,7 @@ const updateProductRating = async (productId: string) => {
             }
         });
     } catch (error) {
-        console.error("Update product rating error:", error);
+        console.error(`Update product rating error:${apiStatusCode.InternalServerError}`,error);
     }
 };
 
@@ -668,7 +670,7 @@ export const updateProductSoldCount = async (productId: string, quantity: number
             }
         });
     } catch (error) {
-        console.error("Update product sold count error:", error);
+       console.error(`Update product rating error:${apiStatusCode.InternalServerError}`,error);
     }
 };
 
@@ -681,7 +683,7 @@ export const getProductsByCategory = async (categoryId: string, options: {
 } = {}) => {
     try {
         if (!categoryId) {
-            throw new ProductError("Category ID is required", 400, "MISSING_ID");
+            throw new ProductError("Category ID is required", apiStatusCode.BadRequest, "MISSING_ID");
         }
 
         const page = Math.max(1, options.page || 1);
@@ -717,7 +719,7 @@ export const getProductsByCategory = async (categoryId: string, options: {
     } catch (error: any) {
         if (error instanceof ProductError) throw error;
         console.error("Get products by category error:", error);
-        throw new ProductError(error?.message || "Failed to fetch products", 500);
+        throw new ProductError(error?.message || "Failed to fetch products", apiStatusCode.InternalServerError);
     }
 };
 
@@ -768,6 +770,6 @@ export const getProductStatistics = async () => {
         };
     } catch (error: any) {
         console.error("Get statistics error:", error);
-        throw new ProductError(error?.message || "Failed to fetch statistics", 500);
+        throw new ProductError(error?.message || "Failed to fetch statistics", apiStatusCode.InternalServerError);
     }
 };

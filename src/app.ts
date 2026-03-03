@@ -57,9 +57,20 @@ const limiter = rateLimit({
 app.use(limiter);
 
 
+// ======================================================
+// 4. 📜 logger Handler (Moved up to capture all requests)
+// ======================================================
+app.use((req, res, next) => {
+    const start = Date.now();
+    res.on('finish', () => {
+        const duration = Date.now() - start;
+        logger.http(`${req.method} ${req.url} ${res.statusCode} - ${duration}ms`, { ip: req.ip });
+    });
+    next();
+});
 
 // ======================================================
-// 4. 🤖 Arcjet — AI Security Layer Middleware
+// 5. 🤖 Arcjet — AI Security Layer Middleware
 // ======================================================
 // Protect Any Route
 // app.use(async (req, res, next) => {
@@ -80,14 +91,14 @@ app.use("/api", rootRouter);
 // ======================================================
 // 6. 📜 logger Handler
 // ======================================================
-app.use((req, res, next) => {
-    const start = Date.now();
-    res.on('finish', () => {
-        const duration = Date.now() - start;
-        logger.http(`${req.method} ${req.url} ${res.statusCode} - ${duration}ms`, { ip: req.ip });
-    });
-    next();
-});
+// app.use((req, res, next) => {
+//     const start = Date.now();
+//     res.on('finish', () => {
+//         const duration = Date.now() - start;
+//         logger.http(`${req.method} ${req.url} ${res.statusCode} - ${duration}ms`, { ip: req.ip });
+//     });
+//     next();
+// });
 
 
 // ======================================================
