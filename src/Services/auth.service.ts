@@ -18,7 +18,7 @@ export const signup = async (username: string, email: string, password: string, 
     const normalizedEmail = email.toLowerCase();
     const normalizedUsername = username.toLowerCase();
     try {
-        if (!email || !password || !username || !role) throw new Error(`Invalid request status code: ${apiStatusCode.NotFound}`);
+        if (!email || !password || !username || role !== "USER") throw new Error(`Invalid request status code: ${apiStatusCode.NotFound}`);
 
 
         const existing = await prisma.user.findFirst({

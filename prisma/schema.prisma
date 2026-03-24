@@ -19,7 +19,7 @@ model User {
   username        String   @unique
   email           String   @unique
   password        String
-  role            Role   @default(USER)
+  role            Role   @default(USER) 
   isEmailVerified Boolean  @default(false)
   lockedUntil     DateTime?      // Account lockout
   deletedAt       DateTime?      // Soft delete (skip in queries)
@@ -91,8 +91,8 @@ type ProductSize{
 }
 type SubProduct{
   sku String?
-  images Image[]
-  descriptionImages Image[]
+  images String[]
+  descriptionImages String[]
   sizes ProductSize[]
   discount Float? @default(0)
   sold Int?  @default(0)
@@ -111,8 +111,8 @@ model Product {
   featured  Boolean  @default(false)
   discount  Float?   @default(0)
   sold      Int      @default(0)
-  images          Image[]
-  descriptionImages Image[]
+  images          String[]
+  descriptionImages String[]
   ingredients Json   // ProductIngredient[]
   sizes           ProductSize[]
   subProducts     SubProduct[]
@@ -144,8 +144,8 @@ model Vendor{
   slug      String   @unique
   description String
   longDescription String
-  images          Image[]
-  descriptionImages Image[]
+  images          String[]
+  descriptionImages String[]
   vendorProductType String
   products Product[] @relation("VendorProducts")
   
@@ -312,15 +312,18 @@ enum AddressType {
 }
 model Address{
   id        String   @id @default(auto()) @map("_id") @db.ObjectId
+  name      String
+  phone     String
+  email     String
   street    String
   city      String
   state     String
   postalCode String
   country   String
   addressType AddressType // MY ADDRESS | GIFT ADDRESS
-  name      String? // Recipient name for gift address
-  phone     String? // Recipient phone number for gift address
-  description String? // Optional description or label for the address
+  friendName      String? // Friend name for gift address
+  friendPhone     String? // Friend phone number for gift address
+  giftDescription String? // Optional description or label for the address
 
   userId String @db.ObjectId
   user   User   @relation("UserAddresses", fields: [userId], references: [id], onDelete: Cascade, onUpdate: Cascade)
@@ -348,8 +351,8 @@ model Banner{
   id        String   @id @default(auto()) @map("_id") @db.ObjectId
   title     String
   description String
-  image     Image
-  link      BannerLink
+  image     String?
+  link      String?
   type      BannerType @default(HOME)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

@@ -1,6 +1,6 @@
 import prisma from "../prisma/client";
-import { Prisma } from "@prisma/client";
 import { apiStatusCode } from "../lib/apiCode.lib";
+import { Prisma } from "@prisma/client";
 
 // Custom error class
 export class ProductError extends Error {
@@ -82,7 +82,11 @@ export const createProduct = async (data: {
             }
         });
 
-        return product;
+        return {
+            message: "Product created successfully",
+            data: product,
+            statusCode: apiStatusCode.Created
+        }
     } catch (error: any) {
         if (error instanceof ProductError) throw error;
         console.error("Create product error:", error);
