@@ -35,8 +35,8 @@ export const createVendor = async (data: {
                 description: data.description,
                 longDescription: data.longDescription,
                 vendorProductType: data.vendorProductType,
-                images: data.images,
-                descriptionImages: data.descriptionImages
+                images: data.images.map(img => img.url || img.public_url).filter(Boolean) as string[],
+                descriptionImages: data.descriptionImages.map(img => img.url || img.public_url).filter(Boolean) as string[]
             }
         });
 
@@ -132,7 +132,15 @@ export const updateVendor = async (id: string, data: {
         //update the vendor
         const vendor = await prisma.vendor.update({
             where: { id },
-            data: data
+            data: {
+                name: data.name,
+                slug: data.slug,
+                description: data.description,
+                longDescription: data.longDescription,
+                vendorProductType: data.vendorProductType,
+                images: data.images.map(img => img.url || img.public_url).filter(Boolean) as string[],
+                descriptionImages: data.descriptionImages.map(img => img.url || img.public_url).filter(Boolean) as string[]
+            }
         });
 
         // Bugfix: Handle null when ID is not found

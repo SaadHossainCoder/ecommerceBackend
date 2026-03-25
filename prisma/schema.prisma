@@ -21,6 +21,7 @@ model User {
   password        String
   role            Role   @default(USER) 
   isEmailVerified Boolean  @default(false)
+  isBlocked       Boolean  @default(false)
   lockedUntil     DateTime?      // Account lockout
   deletedAt       DateTime?      // Soft delete (skip in queries)
   createdAt       DateTime @default(now())
@@ -86,7 +87,7 @@ type Image{
 type ProductSize{
   size String
   qty Int
-  price Float
+  price Int
   sold Int @default(0)
 }
 type SubProduct{
@@ -94,7 +95,7 @@ type SubProduct{
   images String[]
   descriptionImages String[]
   sizes ProductSize[]
-  discount Float? @default(0)
+  discount Int? @default(0)
   sold Int?  @default(0)
 }
 
@@ -106,10 +107,10 @@ model Product {
   longDescription String
   productIsAvailable Boolean  @default(true)
   sku       String   @unique
-  rating    Float    @default(0)
+  rating    Int    @default(0)
   numReviews Int     @default(0)
   featured  Boolean  @default(false)
-  discount  Float?   @default(0)
+  discount  Int?   @default(0)
   sold      Int      @default(0)
   images          String[]
   descriptionImages String[]
@@ -126,6 +127,7 @@ model Product {
   productReviews ProductReview[] @relation("UserProductReviews")
   cartItems      CartItem[] @relation("UserCartItems")
   orderItems     OrderItem[] @relation("ProductOrderItems")
+  coupons        Coupon[]
 
   deletedAt DateTime? // Soft delete
   createdAt DateTime @default(now())
@@ -133,6 +135,7 @@ model Product {
 
   @@map("products")
   @@index([categoryId])
+  @@index([title])
   @@index([createdAt(sort: Desc)])
   @@index([deletedAt])
   @@index([productIsAvailable])
@@ -170,6 +173,7 @@ model Category {
   subCategories    Category[] @relation("SubCategories")
 
   products  Product[] @relation("CategoryProducts")
+  coupons   Coupon[]
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -205,24 +209,29 @@ model ProductReview {
 
 model CartItem {
   id        String   @id @default(auto()) @map("_id") @db.ObjectId
+
   quantity  Int      @default(1)
-  price     Float    // Price at time of adding to cart
-  selectedSize String? // Selected product size if applicable
+  price     Int    // snapshot price
+
+  selectedSize String?
+
+  isSelected Boolean @default(true)
 
   productId String  @db.ObjectId
-  product   Product @relation("UserCartItems",fields: [productId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  product   Product @relation("UserCartItems", fields: [productId], references: [id], onDelete: NoAction)
 
   userId String @db.ObjectId
-  user   User   @relation("UserCartItems",fields: [userId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  user   User   @relation("UserCartItems", fields: [userId], references: [id], onDelete: Cascade)
+
+  deletedAt DateTime?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  @@map("cartItems")
   @@unique([productId, userId, selectedSize])
   @@index([userId])
+  @@index([deletedAt])
 }
-
 // Use enums:
 enum OrderStatus {
   PENDING
@@ -261,10 +270,10 @@ model Order {
   orderNumber  String   @unique // User-friendly order ID
   status       OrderStatus   @default(PENDING) // PENDING | CONFIRMED | SHIPPED | DELIVERED | CANCELLED
   paymentStatus PaymentStatus  @default(UNPAID) // UNPAID | PAID | FAILED | REFUNDED
-  totalAmount  Float
-  taxAmount    Float    @default(0)
-  shippingAmount Float  @default(0)
-  discountAmount Float  @default(0)
+  totalAmount  Int
+  taxAmount    Int    @default(0)
+  shippingAmount Int  @default(0)
+  discountAmount Int  @default(0)
 
   // Shipping info
   shippingAddress ShippingAddress[]
@@ -292,7 +301,7 @@ model Order {
 model OrderItem {
   id       String  @id @default(auto()) @map("_id") @db.ObjectId
   quantity Int
-  price    Float   // Price at time of purchase
+  price    Int   // Price at time of purchase
   size     String? // Selected size if applicable
 
   productId String  @db.ObjectId
@@ -307,32 +316,46 @@ model OrderItem {
 }
 
 enum AddressType {
-  myAddress
-  giftAddress
+  MY_ADDRESS
+  GIFT_ADDRESS
 }
-model Address{
+
+model Address {
   id        String   @id @default(auto()) @map("_id") @db.ObjectId
+
   name      String
   phone     String
-  email     String
+  email     String?
+
   street    String
   city      String
   state     String
   postalCode String
   country   String
-  addressType AddressType // MY ADDRESS | GIFT ADDRESS
-  friendName      String? // Friend name for gift address
-  friendPhone     String? // Friend phone number for gift address
-  giftDescription String? // Optional description or label for the address
 
+  label     String? // Home, Office
+  isDefault Boolean @default(false)
+
+  addressType AddressType
+
+  // 🎁 Gift fields
+  friendName      String?
+  friendPhone     String?
+  giftDescription String?
+
+  // 👤 User relation
   userId String @db.ObjectId
-  user   User   @relation("UserAddresses", fields: [userId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  user   User   @relation("UserAddresses", fields: [userId], references: [id], onDelete: Cascade)
+
+  // 🧹 Soft delete
+  deletedAt DateTime?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   @@map("addresses")
   @@index([userId])
+  @@index([deletedAt])
 }
 
 enum BannerType {
@@ -360,7 +383,7 @@ model Banner{
   @@map("banners")
 }
 
-model topBarNotification{
+model TopBarNotification{
   id        String   @id @default(auto()) @map("_id") @db.ObjectId
   title     String
   message   String
@@ -372,24 +395,65 @@ model topBarNotification{
   @@map("notificationBars")
 }
 
+enum DiscountType {
+  PERCENTAGE
+  FIXED
+}
+
+enum CouponScope {
+  ALL
+  CATEGORY
+  PRODUCT
+  USER
+}
+
 
 model Coupon {
   id          String   @id @default(auto()) @map("_id") @db.ObjectId
+
   code        String   @unique
   description String?
-  maxDiscountAmount Float? // For percentage discounts, cap the maximum discount
-  minPurchaseAmount Float? // Minimum order amount to apply coupon
+
+  // 🔥 Discount Type
+  discountType DiscountType
+  discountValue Int
+
+  // 💰 Limits
+  maxDiscountAmount Int?   // Cap for % discount
+  minPurchaseAmount Int?   // Minimum cart value
+
+  // ⏳ Validity
   validFrom   DateTime
   validUntil  DateTime
-  usageLimit  Int?     // Total times this coupon can be used across all users
-  perUserLimit Int?    // Times a single user can use this coupon
+
+  // 🔢 Usage Control
+  usageLimit   Int?   // Total usage
+  usedCount    Int    @default(0)
+
+  perUserLimit Int?   // Per user usage
+
+  // 🔒 Status
+  isActive Boolean @default(true)
+
+  // 🎯 Scope (Optional)
+  applicableTo CouponScope @default(ALL)
+
+  // 👤 User restriction (optional)
+  userIds String[] @db.ObjectId
+  users   User[]   @relation("UserCoupons", fields: [userIds], references: [id])
+
+  // 📦 Optional: Apply to category/product
+  categoryId String? @db.ObjectId
+  category   Category? @relation(fields: [categoryId], references: [id])
+
+  productId String? @db.ObjectId
+  product   Product? @relation(fields: [productId], references: [id])
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  userIds     String[] @db.ObjectId
-  users       User[]   @relation("UserCoupons",fields: [userIds], references: [id])
-
+  @@index([validFrom, validUntil])
+  @@index([isActive])
   @@map("coupons")
 }
 

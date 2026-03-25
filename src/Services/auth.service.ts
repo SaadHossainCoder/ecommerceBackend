@@ -1,5 +1,6 @@
 import { hashPassword, hashToken, randomTokenHex, verifyPassword } from "../utils/hash.utils"
 import { sendEmail } from "../utils/emailSend.utils"
+import { getForgotPasswordEmail, getOtpEmail, getVerificationEmail } from "../utils/emailTemplates.utils";
 import { signAccessToken } from "../utils/token.utils";
 import { apiStatusCode } from "../lib/apiCode.lib";
 import prisma from "../prisma/client";
@@ -47,9 +48,10 @@ export const signup = async (username: string, email: string, password: string, 
             });
 
             const tokenPlain = randomTokenHex(32);
+            if (!user.id) throw new Error("User ID is required for token creation");
             await tx.emailToken.create({
                 data: {
-                    userId: user.id,
+                    user: { connect: { id: user.id } },
                     tokenHash: hashToken(tokenPlain),
                     purpose: "VERIFY_EMAIL",
                     expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
@@ -57,10 +59,10 @@ export const signup = async (username: string, email: string, password: string, 
             });
 
             // Async email (fire-and-forget)
-            // const link = `${process.env.FRONTEND_URL}/verify?uid=${user.id}&token=${tokenPlain}`;
-            // sendEmail(user.email, "Verify your email", `<p>Verify: <a href="${link}">Link</a> or code: ${tokenPlain}</p>`)
-            // .catch((err) => logger.error("Email send failed", { userId: user.id, err }));
-            // const accessToken = signAccessToken({ sub: user.id, role: user.role });
+            const link = `${process.env.FRONTEND_URL}/verify?uid=${user.id}&token=${tokenPlain}`;
+            sendEmail(user.email, "Verify your email", getVerificationEmail(user.username, link))
+            .catch((err) => logger.error("Email send failed", { userId: user.id, err }));
+            const accessToken = signAccessToken({ id: user.id, role: user.role });
 
             logger.info("User signed up", { userId: user.id, role });
             return { user, tokenPlain};
@@ -105,15 +107,21 @@ export const login = async (email: string, password: string) => {
         // console.log("user", user);
         if (!user || !isPasswordValid) throw new AuthError("Invalid email or password", apiStatusCode.Unauthorized, "INVALID_CREDENTIALS");
 
+        if (user.isBlocked) {
+            logger.warn("Login attempt by blocked user", { userId: user.id });
+            throw new AuthError("Your account has been blocked. Please contact support.", apiStatusCode.NotMatched, "USER_BLOCKED");
+        }
+
         // access token
-        const accessToken = signAccessToken({ sub: user.id, role: user.role });
+        const accessToken = signAccessToken({ id: user.id, role: user.role });
 
         // create refresh token
+        if (!user.id) throw new AuthError("User ID is required", apiStatusCode.InternalServerError);
         const refreshPlain = randomTokenHex(64);
         const refreshHash = hashToken(refreshPlain);
         await prisma.refreshToken.create({
             data: {
-                userId: user.id,
+                user: { connect: { id: user.id } },
                 tokenHash: refreshHash,
                 expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000) // 30 days
             }
@@ -190,53 +198,43 @@ export const refreshTokens = async (refreshToken: string) => {
             throw new Error("User not found");
         }
 
+        if (user.isBlocked) {
+            // Revoke the token for blocked user
+            await prisma.refreshToken.update({
+                where: { id: found.id },
+                data: { revoked: true }
+            });
+            logger.warn("Token refresh attempt by blocked user", { userId: user.id });
+            throw new Error("Your account has been blocked");
+        }
+
         // issue new tokens
         const newplain = randomTokenHex(64);
         const newHash = hashToken(newplain);
         const newExpiry = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000); // 30 days
 
 
-        await prisma.$transaction(async (tx: any) => {
-            // Revoke the old token
-            await tx.refreshToken.update({
-                where: {
-                    id: found.id
-                },
-                data: {
-                    revoked: true,
-                    replacedBy: newHash
-                },
-            });
+        // Update the token in place instead of creating a new record
+        await prisma.refreshToken.update({
+            where: {
+                id: found.id
+            },
+            data: {
+                tokenHash: newHash,
+                expiresAt: newExpiry
+            },
+        });
 
-            // Create the new token
-            await tx.refreshToken.create({
-                data: {
-                    userId,
-                    tokenHash: newHash,
-                    expiresAt: newExpiry
-                }
-            });
-
-            // Cleanup old refresh tokens for this user
-            // Delete expired tokens and revoked tokens older than 7 days
-            const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
-            await tx.refreshToken.deleteMany({
-                where: {
-                    userId,
-                    OR: [
-                        { expiresAt: { lt: new Date() } }, // Expired tokens
-                        {
-                            revoked: true,
-                            updatedAt: { lt: sevenDaysAgo } // Revoked tokens older than 7 days
-                        }
-                    ]
-                }
-            });
-        }
-        );
+        // Cleanup: Delete other expired tokens for this user
+        await prisma.refreshToken.deleteMany({
+            where: {
+                userId,
+                expiresAt: { lt: new Date() }
+            }
+        });
 
 
-        const accessToken = signAccessToken({ sub: userId });
+        const accessToken = signAccessToken({ id: userId, role: user.role });
 
         return { refreshToken: newplain, accessToken };
     } catch (error) {
@@ -259,7 +257,7 @@ export const requestForgotPassword = async (email: string) => {
         const tokenPlain = randomTokenHex(32);
         await prisma.emailToken.create({
             data: {
-                userId: user.id,
+                user: { connect: { id: user.id } },
                 tokenHash: hashToken(tokenPlain),
                 purpose: "FORGOT_PASSWORD",
                 expiresAt: new Date(Date.now() + 60 * 60 * 1000) // 1 hour
@@ -271,10 +269,7 @@ export const requestForgotPassword = async (email: string) => {
         sendEmail(
             user.email,
             "Reset your password",
-            `<p>Please reset your password by clicking on the following link:
-            <br>
-            <a href="${link}">Reset Password</a>
-            </p>`
+            getForgotPasswordEmail(user.username, link)
         ).catch(console.error);
         return { user, tokenPlain };
     } catch (error) {
@@ -372,14 +367,23 @@ export const createOtp = async (userId: string) => {
         if (!userId) throw new Error(`Invalid request status code: ${apiStatusCode.NotFound}`);
         const otp = (Math.floor(100000 + Math.random() * 900000)).toString(); // 6-digit OTP
         const otpHash = hashToken(otp);
+        
+        // Fetch user for name in template
+        const user = await prisma.user.findUnique({ where: { id: userId }, select: { username: true, email: true } });
+        
         await prisma.emailToken.create({
             data: {
-                userId,
+                user: { connect: { id: userId } },
                 tokenHash: otpHash,
                 purpose: "OTP",
                 expiresAt: new Date(Date.now() + 10 * 60 * 1000) // 10 minutes
             }
         });
+
+        if (user) {
+            sendEmail(user.email, "Your OTP Code", getOtpEmail(user.username, otp)).catch(console.error);
+        }
+
         return otp;
     } catch (error) {
         console.error("Create OTP service error:", error);

@@ -2,6 +2,10 @@
 import "dotenv/config";
 
 import app from "./app";
+import { verifyEmailConfig } from "./utils/emailSend.utils";
+
+// Initialize email configuration check
+verifyEmailConfig();
 
 const port = process.env.PORT || 3000;
 

@@ -1,27 +1,58 @@
-import jwt from 'jsonwebtoken';
-import { Request, Response, NextFunction } from 'express';
-import {apiStatusCode} from "../lib/apiCode.lib";
+import jwt from "jsonwebtoken";
+import { Response, NextFunction } from "express";
+import { AuthRequest } from "../types/express";
 
-export const authGuard = (roles: string[] = []) => (req: Request, res: Response, next: NextFunction) => {
+export const authGuard =
+  (roles: string[] = []) =>
+  (req: AuthRequest, res: Response, next: NextFunction) => {
+
     const header = req.headers.authorization;
 
+    // 🔒 1. Check header
     if (!header) {
-        return res.status(apiStatusCode.NotFound).json({ ok: false, message: 'Authorization header missing' });
-    };
-
-    const parts = header.split(' ');
-    if (parts.length !== 2 || parts[0] !== 'Bearer') {
-        return res.status(apiStatusCode.NotMatched).json({ ok: false, message: "Invalid Authorization format" });
+      return res.status(401).json({
+        ok: false,
+        message: "Authorization header missing",
+      });
     }
 
-    const token = parts[1];
+    // 🔒 2. Validate format
+    const [type, token] = header.split(" ");
+
+    if (type !== "Bearer" || !token) {
+      return res.status(401).json({
+        ok: false,
+        message: "Invalid Authorization format",
+      });
+    }
+
     try {
-        const payload = jwt.verify(token, process.env.JWT_SECRET as string) as { role: string };
-        (req as any).user = payload;
+      // 🔒 3. Check secret
+      if (!process.env.JWT_SECRET) {
+        throw new Error("JWT_SECRET not defined");
+      }
 
-        if (roles.length && !roles.includes(payload.role)) return res.status(apiStatusCode.NotMatched).json({ ok: false, message: "Forbidden" });
-        next();
+      // 🔒 4. Verify token
+      const payload = jwt.verify(
+        token,
+        process.env.JWT_SECRET
+      ) as { id: string; role: string };
+
+      req.user = payload;
+
+      // 🔒 5. Role check
+      if (roles.length && !roles.includes(payload.role)) {
+        return res.status(403).json({
+          ok: false,
+          message: "Forbidden: Access denied",
+        });
+      }
+
+      next();
     } catch (error) {
-        return res.status(apiStatusCode.Unauthorized).json({ ok: false, message: "Invalid or expired token" });
+      return res.status(401).json({
+        ok: false,
+        message: "Invalid or expired token",
+      });
     }
-};
+  };

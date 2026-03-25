@@ -37,17 +37,25 @@ export const createProduct = async (data: {
             throw new ProductError("Missing required fields", apiStatusCode.BadRequest, "MISSING_FIELDS");
         }
 
-        // Check if category exists
+        // Check if category exists and is not deleted
         const category = await prisma.category.findUnique({
-            where: { id: data.categoryId }
+            where: { id: data.categoryId, deletedAt: null } as any
         });
         if (!category) {
-            throw new ProductError("Category not found", apiStatusCode.NotFound, "CATEGORY_NOT_FOUND");
+            throw new ProductError("Category not found or has been deleted", apiStatusCode.NotFound, "CATEGORY_NOT_FOUND");
         }
 
-        // Check for duplicate slug or SKU
+        // Validate sizes
+        data.sizes?.forEach(s => {
+            if (!s.size || s.qty < 0 || s.price <= 0) {
+                throw new ProductError("Invalid size data: size, qty >= 0, and price > 0 are required", apiStatusCode.BadRequest, "INVALID_SIZE_DATA");
+            }
+        });
+
+        // Check for duplicate slug or SKU (ignoring deleted products)
         const existing = await prisma.product.findFirst({
             where: {
+                deletedAt: null,
                 OR: [
                     { slug: data.slug.toLowerCase() },
                     { sku: data.sku.toUpperCase() }
@@ -69,8 +77,8 @@ export const createProduct = async (data: {
                 categoryId: data.categoryId,
                 featured: data.featured || false,
                 discount: data.discount || 0,
-                images: data.images || [],
-                descriptionImages: data.descriptionImages || [],
+                images: data.images?.map(img => img.url || img.public_url).filter(Boolean) as string[] || [],
+                descriptionImages: data.descriptionImages?.map(img => img.url || img.public_url).filter(Boolean) as string[] || [],
                 sizes: data.sizes || [],
                 subProducts: data.subProducts || [],
                 ingredients: data.ingredients || null,
@@ -356,13 +364,13 @@ export const updateProduct = async (id: string, data: Partial<{
             throw new ProductError("Product not found", apiStatusCode.NotFound, "PRODUCT_NOT_FOUND");
         }
 
-        // Check category if provided
+        // Check category if provided (and not deleted)
         if (data.categoryId) {
             const category = await prisma.category.findUnique({
-                where: { id: data.categoryId }
+                where: { id: data.categoryId, deletedAt: null } as any
             });
             if (!category) {
-                throw new ProductError("Category not found", apiStatusCode.NotFound, "CATEGORY_NOT_FOUND");
+                throw new ProductError("Category not found or has been deleted", apiStatusCode.NotFound, "CATEGORY_NOT_FOUND");
             }
         }
 
@@ -388,9 +396,16 @@ export const updateProduct = async (id: string, data: Partial<{
         if (data.discount !== undefined) updateData.discount = Math.max(0, Math.min(100, data.discount));
         if (data.featured !== undefined) updateData.featured = data.featured;
         if (data.categoryId) updateData.categoryId = data.categoryId;
-        if (data.images) updateData.images = data.images;
-        if (data.descriptionImages) updateData.descriptionImages = data.descriptionImages;
-        if (data.sizes) updateData.sizes = data.sizes;
+        if (data.images) updateData.images = data.images.map(img => img.url || img.public_url).filter(Boolean);
+        if (data.descriptionImages) updateData.descriptionImages = data.descriptionImages.map(img => img.url || img.public_url).filter(Boolean);
+        if (data.sizes) {
+            data.sizes.forEach(s => {
+                if (!s.size || s.qty < 0 || s.price <= 0) {
+                    throw new ProductError("Invalid size data", apiStatusCode.BadRequest);
+                }
+            });
+            updateData.sizes = data.sizes;
+        }
         if (data.subProducts) updateData.subProducts = data.subProducts;
         if (data.ingredients !== undefined) updateData.ingredients = data.ingredients;
 
@@ -504,6 +519,9 @@ export const addProductReview = async (productId: string, userId: string, data: 
         if (!user) {
             throw new ProductError("User not found", apiStatusCode.NotFound, "USER_NOT_FOUND");
         }
+        if (user.isBlocked) {
+            throw new ProductError("Your account has been blocked", apiStatusCode.NotMatched, "USER_BLOCKED");
+        }
 
         // Check if user already reviewed this product
         const existingReview = await prisma.productReview.findFirst({
@@ -516,8 +534,8 @@ export const addProductReview = async (productId: string, userId: string, data: 
 
         const review = await prisma.productReview.create({
             data: {
-                productId,
-                userId,
+                product: { connect: { id: productId } },
+                user: { connect: { id: userId } },
                 rating: Math.round(data.rating * 2) / 2, // Round to nearest 0.5
                 comment: data.comment.trim()
             },

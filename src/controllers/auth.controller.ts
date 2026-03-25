@@ -1,12 +1,13 @@
-import { Request, Response } from "express";
+import { Response } from "express";
+import { AuthRequest } from "../types/express";
 import * as authService from "../Services/auth.service";
 import { CONFIG } from "../config/constants";
 import { apiStatusCode } from "../lib/apiCode.lib";
 
 // signup controller
-export const signup = async (req: Request, res: Response) => {
+export const signup = async (req: AuthRequest, res: Response) => {
     try {
-        const { username, email, password, role } = req.body;
+        const { username, email, password, role } = req.body as any;
         if (!username || !email || !password || !role) {
             return res.status(apiStatusCode.NotFound).json({ ok: false, message: "Missing field" });
         };
@@ -32,9 +33,9 @@ export const signup = async (req: Request, res: Response) => {
 };
 
 // login controller
-export const login = async (req: Request, res: Response) => {
+export const login = async (req: AuthRequest, res: Response) => {
     try {
-        const { email, password } = req.body;
+        const { email, password } = req.body as any;
         if (!email || !password) {
             return res.status(apiStatusCode.NotFound).json({ ok: false, message: "Invalid request" });
         };
@@ -58,10 +59,10 @@ export const login = async (req: Request, res: Response) => {
 };
 
 // logout controller
-export const logout = async (req: Request, res: Response) => {
+export const logout = async (req: AuthRequest, res: Response) => {
     try {
         const cookie = req.cookies[CONFIG.REFRESH_COOKIE_NAME];
-        const userId = (req.user as any)?.sub; // Secured: get from token
+        const userId = req.user?.id;
 
         if (!cookie || !userId) {
             return res.status(apiStatusCode.Unauthorized).json({ ok: false, message: "Invalid request: Missing cookie or authorization" });
@@ -87,7 +88,7 @@ export const logout = async (req: Request, res: Response) => {
 };
 
 // refresh token controller
-export const refresh = async (req: Request, res: Response) => {
+export const refresh = async (req: AuthRequest, res: Response) => {
     try {
         const cookie = req.cookies[CONFIG.REFRESH_COOKIE_NAME];
 
@@ -111,9 +112,9 @@ export const refresh = async (req: Request, res: Response) => {
 };
 
 // forgot password controller
-export const requestForgotPassword = async (req: Request, res: Response) => {
+export const requestForgotPassword = async (req: AuthRequest, res: Response) => {
     try {
-        const { email } = req.body;
+        const { email } = req.body as any;
         if (!email) {
             return res.status(apiStatusCode.NotFound).json({ ok: false, message: "Invalid request" });
         };
@@ -125,9 +126,9 @@ export const requestForgotPassword = async (req: Request, res: Response) => {
 };
 
 // reset password controller
-export const resetPassword = async (req: Request, res: Response) => {
+export const resetPassword = async (req: AuthRequest, res: Response) => {
     try {
-        const { uid, token, password, confirmPassword } = req.body;
+        const { uid, token, password, confirmPassword } = req.body as any;
         if (!uid || !token || !password || !confirmPassword) {
             return res.status(apiStatusCode.NotFound).json({ ok: false, message: "Invalid request" });
         };
@@ -149,9 +150,9 @@ export const resetPassword = async (req: Request, res: Response) => {
 };
 
 // verify email controller
-export const verifyEmail = async (req: Request, res: Response) => {
+export const verifyEmail = async (req: AuthRequest, res: Response) => {
     try {
-        const { uid, token } = req.body;
+        const { uid, token } = req.body as any;
         if (!uid || !token) {
             return res.status(apiStatusCode.NotFound).json({ ok: false, message: "Invalid request" });
         };
@@ -163,9 +164,9 @@ export const verifyEmail = async (req: Request, res: Response) => {
 };
 
 // send otp controller
-export const sendOtp = async (req: Request, res: Response) => {
+export const sendOtp = async (req: AuthRequest, res: Response) => {
     try {
-        const { uid } = req.body;
+        const { uid } = req.body as any;
         if (!uid) {
             return res.status(apiStatusCode.NotFound).json({ ok: false, message: "Invalid request" });
         };
@@ -177,9 +178,9 @@ export const sendOtp = async (req: Request, res: Response) => {
 };
 
 // verify otp controller
-export const verifyOtp = async (req: Request, res: Response) => {
+export const verifyOtp = async (req: AuthRequest, res: Response) => {
     try {
-        const { uid, otp } = req.body;
+        const { uid, otp } = req.body as any;
         if (!uid || !otp) {
             return res.status(apiStatusCode.NotFound).json({ ok: false, message: "Invalid request" });
         };
@@ -194,7 +195,7 @@ export const verifyOtp = async (req: Request, res: Response) => {
 };
 
 // get all users only admin controller
-export const getAllUsers = async (req: Request, res: Response) => {
+export const getAllUsers = async (req: AuthRequest, res: Response) => {
     try {
         const users = await authService.getAllUsers();
         return res.status(apiStatusCode.Success).json({ ok: true, users, message: "Users fetched successfully" });
@@ -204,9 +205,9 @@ export const getAllUsers = async (req: Request, res: Response) => {
 };
 
 // get me controller
-export const getMe = async (req: Request, res: Response) => {
+export const getMe = async (req: AuthRequest, res: Response) => {
     try {
-        const userId = (req.user as any)?.sub;
+        const userId = req.user?.id;
         if (!userId) {
             return res.status(apiStatusCode.NotFound).json({ ok: false, message: "Invalid request" });
         };
@@ -219,9 +220,9 @@ export const getMe = async (req: Request, res: Response) => {
 };
 
 // delete user by id only admin controller
-export const deleteUserById = async (req: Request, res: Response) => {
+export const deleteUserById = async (req: AuthRequest, res: Response) => {
     try {
-        const adminId = (req.user as any)?.sub;
+        const adminId = req.user?.id;
         const { id: userId } = req.params;
         if (!adminId || !userId) {
             return res.status(apiStatusCode.NotFound).json({ ok: false, message: "Invalid request" });
