@@ -11,18 +11,7 @@ export const signup = async (req: AuthRequest, res: Response) => {
         if (!username || !email || !password || !role) {
             return res.status(apiStatusCode.NotFound).json({ ok: false, message: "Missing field" });
         };
-        const { user, tokenPlain } = await authService.signup(username, email, password, role);
-
-        // Set refresh token cookie
-        res.cookie(
-            CONFIG.REFRESH_COOKIE_NAME, tokenPlain,
-            {
-                httpOnly: true,
-                secure: CONFIG.NODE_ENV === "production",
-                sameSite: "lax",
-                maxAge: 30 * 24 * 60 * 60 * 1000
-            }
-        );
+        const { user } = await authService.signup(username, email, password, role);
 
         return res.status(apiStatusCode.Created).json({ ok: true, user: { id: user.id, username: user.username, email: user.email, role: user.role } });
     } catch (error: any) {
@@ -49,10 +38,16 @@ export const login = async (req: AuthRequest, res: Response) => {
         res.cookie(
             CONFIG.REFRESH_COOKIE_NAME, refreshToken,
             {
-                httpOnly: true, secure: process.env.NODE_ENV === "production", sameSite: "lax", maxAge: 30 * 24 * 60 * 60 * 1000
+                httpOnly: true, secure: process.env.NODE_ENV === "production", sameSite: "lax", path: "/", maxAge: 30 * 24 * 60 * 60 * 1000
             });
 
-        return res.status(apiStatusCode.Success).json({ ok: true, user: { id: user.id, username: user.username, email: user.email, role: user.role }, accessToken });
+        res.cookie(
+            "accessToken", accessToken,
+            {
+                httpOnly: true, secure: process.env.NODE_ENV === "production", sameSite: "lax", path: "/", maxAge: 30 * 60 * 1000
+            });
+
+        return res.status(apiStatusCode.Success).json({ ok: true, user: { id: user.id, username: user.username, email: user.email, role: user.role } });
     } catch (error) {
         return res.status(apiStatusCode.BadRequest).json({ ok: false, message: (error as Error).message });
     }
@@ -62,21 +57,34 @@ export const login = async (req: AuthRequest, res: Response) => {
 export const logout = async (req: AuthRequest, res: Response) => {
     try {
         const cookie = req.cookies[CONFIG.REFRESH_COOKIE_NAME];
-        const userId = req.user?.id;
+        const userId = req.user?.id || req.body?.id;
 
-        if (!cookie || !userId) {
-            return res.status(apiStatusCode.Unauthorized).json({ ok: false, message: "Invalid request: Missing cookie or authorization" });
-        }
-
-        // Revoke refresh token in database
-        await authService.logout(userId, cookie);
-
-        // Clear refresh token cookie (only after successful revocation)
+        // Always clear tokens from the client browser
         res.clearCookie(CONFIG.REFRESH_COOKIE_NAME, {
             httpOnly: true,
-            secure: CONFIG.NODE_ENV === "production",
-            sameSite: "lax"
+            secure: process.env.NODE_ENV === "production",
+            sameSite: "lax",
+            path: "/"
         });
+        res.clearCookie("accessToken", {
+            httpOnly: true,
+            secure: process.env.NODE_ENV === "production",
+            sameSite: "lax",
+            path: "/"
+        });
+
+        if (!cookie || !userId) {
+            return res.status(apiStatusCode.Success).json({ ok: true, message: "Logged out from client" });
+        }
+
+        try {
+            // Revoke refresh token in database
+            await authService.logout(userId, cookie);
+        } catch (error) {
+            // Ignore errors if token is already revoked or invalid, 
+            // since the user's ultimate goal is to be logged out anyway.
+            console.warn("Logout DB revocation issue:", (error as Error).message);
+        }
 
         return res.status(apiStatusCode.Success).json({ ok: true, message: "Logged out successfully" });
     } catch (error: any) {
@@ -101,11 +109,19 @@ export const refresh = async (req: AuthRequest, res: Response) => {
             CONFIG.REFRESH_COOKIE_NAME, refreshToken,
             {
                 httpOnly: true,
-                secure: CONFIG.NODE_ENV === "production", sameSite: "lax",
+                secure: CONFIG.NODE_ENV === "production", sameSite: "lax", path: "/",
                 maxAge: 30 * 24 * 60 * 60 * 1000
             }
         );
-        return res.status(apiStatusCode.Success).json({ ok: true, accessToken });
+        res.cookie(
+            "accessToken", accessToken,
+            {
+                httpOnly: true,
+                secure: CONFIG.NODE_ENV === "production", sameSite: "lax", path: "/",
+                maxAge: 30 * 60 * 1000
+            }
+        );
+        return res.status(apiStatusCode.Success).json({ ok: true });
     } catch (error) {
         return res.status(apiStatusCode.BadRequest).json({ ok: false, message: (error as Error).message });
     }
@@ -118,8 +134,8 @@ export const requestForgotPassword = async (req: AuthRequest, res: Response) => 
         if (!email) {
             return res.status(apiStatusCode.NotFound).json({ ok: false, message: "Invalid request" });
         };
-        await authService.requestForgotPassword(email);
-        return res.status(apiStatusCode.Success).json({ ok: true, message: "Password reset link sent to your email" });
+        const { user } = await authService.requestForgotPassword(email);
+        return res.status(apiStatusCode.Success).json({ ok: true, message: "OTP sent to your email", uid: user.id });
     } catch (error) {
         return res.status(apiStatusCode.BadRequest).json({ ok: false, message: (error as Error).message });
     }
@@ -149,7 +165,7 @@ export const resetPassword = async (req: AuthRequest, res: Response) => {
     }
 };
 
-// verify email controller
+// verify email controller ......not using any more......
 export const verifyEmail = async (req: AuthRequest, res: Response) => {
     try {
         const { uid, token } = req.body as any;

@@ -11,7 +11,7 @@ const userRouter = Router();
 
 userRouter.post("/signup", rateLimit({ windowMs: 15 * 60 * 1000, max: 5 }) , validateZod(z.signupSchema), userController.signup);
 userRouter.post("/login",rateLimit({ windowMs: 15 * 60 * 1000, max: 5 }), validateZod(z.loginSchema), userController.login);
-userRouter.post("/logout", authGuard(), userController.logout);
+userRouter.post("/logout", userController.logout);
 userRouter.post("/refresh", userController.refresh);
 userRouter.post("/forgot", validateZod(z.forgotSchema), userController.requestForgotPassword);
 userRouter.post("/reset", validateZod(z.resetSchema), userController.resetPassword);

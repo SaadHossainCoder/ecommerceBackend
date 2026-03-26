@@ -12,6 +12,7 @@ const isSMTPConfigured = () => {
 
 const transporter = nodemailer.createTransport({
   host: process.env.SMTP_HOST,
+  service: "gmail",
   port: Number(process.env.SMTP_PORT),
   secure: Number(process.env.SMTP_PORT) === 465, // ✅ auto-detect
   auth: {

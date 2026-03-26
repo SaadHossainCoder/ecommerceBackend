@@ -7,7 +7,7 @@ import { verifyEmailConfig } from "./utils/emailSend.utils";
 // Initialize email configuration check
 verifyEmailConfig();
 
-const port = process.env.PORT || 3000;
+const port = process.env.PORT || 5000;
 
 app.get("/", (req, res) => {
     res.send("Hello from the secure server!");

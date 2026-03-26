@@ -95,6 +95,46 @@ export const getForgotPasswordEmail = (name: string, link: string) => `
 </html>
 `;
 
+export const getForgotPasswordOtpEmail = (name: string, code: string, link: string) => `
+<!DOCTYPE html>
+<html>
+<body style="font-family: Arial, sans-serif; background:${COLORS.background}; padding:40px; margin:0;">
+<div style="max-width:600px;margin:auto;background:${COLORS.white};border-radius:12px;overflow:hidden;box-shadow:0 4px 6px rgba(0,0,0,0.1);">
+  <div style="background:${COLORS.primary};padding:30px;text-align:center;">
+    <h1 style="color:${COLORS.white};margin:0;">${APP_NAME}</h1>
+  </div>
+  <div style="padding:40px;">
+    <h2 style="color:${COLORS.textDark};">Reset your password</h2>
+    <p style="color:${COLORS.textMedium};font-size:16px;">Hey Cortana,</p>
+    <p style="color:${COLORS.textMedium};font-size:16px;">Hi ${name}, we received a request to reset your password. Use the following OTP to proceed:</p>
+    <div style="text-align:center;margin:30px 0;">
+      <span style="font-size:32px;font-weight:bold;color:${COLORS.primary};letter-spacing:8px;">
+        ${code}
+      </span>
+    </div>
+    <div style="text-align:center;margin:30px 0;">
+      <a href="${link}" style="
+        background:${COLORS.primary};
+        color:${COLORS.white} !important;
+        padding:12px 24px;
+        border-radius:8px;
+        text-decoration:none;
+        font-weight:bold;
+        display:inline-block;">
+        Verify Your OTP Here
+      </a>
+    </div>
+    <p style="color:${COLORS.textMedium};font-size:14px;">This OTP will expire in 10 minutes.</p>
+    <p style="font-size:12px;color:${COLORS.textMuted};margin-top:20px;">If you didn't request a password reset, you can safely ignore this email.</p>
+  </div>
+  <div style="padding:20px;text-align:center;font-size:14px;color:${COLORS.textMuted};background:${COLORS.footerBg};">
+    <p style="margin:5px;">&copy; ${new Date().getFullYear()} ${APP_NAME}</p>
+  </div>
+</div>
+</body>
+</html>
+`;
+
 export const getOtpEmail = (name: string, code: string) => `
 <!DOCTYPE html>
 <html>

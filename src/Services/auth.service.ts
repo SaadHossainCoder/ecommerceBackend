@@ -1,6 +1,6 @@
 import { hashPassword, hashToken, randomTokenHex, verifyPassword } from "../utils/hash.utils"
 import { sendEmail } from "../utils/emailSend.utils"
-import { getForgotPasswordEmail, getOtpEmail, getVerificationEmail } from "../utils/emailTemplates.utils";
+import { getForgotPasswordEmail, getOtpEmail, getVerificationEmail, getForgotPasswordOtpEmail } from "../utils/emailTemplates.utils";
 import { signAccessToken } from "../utils/token.utils";
 import { apiStatusCode } from "../lib/apiCode.lib";
 import prisma from "../prisma/client";
@@ -36,8 +36,8 @@ export const signup = async (username: string, email: string, password: string, 
         const passwordHash = await hashPassword(password);
 
 
-        return await prisma.$transaction(async (tx) => {
-            const user = await tx.user.create({
+        const user = await prisma.$transaction(async (tx) => {
+            return await tx.user.create({
                 data: {
                     username: normalizedUsername.trim(),
                     email: normalizedEmail.trim(),
@@ -46,27 +46,15 @@ export const signup = async (username: string, email: string, password: string, 
                 },
                 select: { id: true, username: true, email: true, role: true },
             });
-
-            const tokenPlain = randomTokenHex(32);
-            if (!user.id) throw new Error("User ID is required for token creation");
-            await tx.emailToken.create({
-                data: {
-                    user: { connect: { id: user.id } },
-                    tokenHash: hashToken(tokenPlain),
-                    purpose: "VERIFY_EMAIL",
-                    expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
-                },
-            });
-
-            // Async email (fire-and-forget)
-            const link = `${process.env.FRONTEND_URL}/verify?uid=${user.id}&token=${tokenPlain}`;
-            sendEmail(user.email, "Verify your email", getVerificationEmail(user.username, link))
-            .catch((err) => logger.error("Email send failed", { userId: user.id, err }));
-            const accessToken = signAccessToken({ id: user.id, role: user.role });
-
-            logger.info("User signed up", { userId: user.id, role });
-            return { user, tokenPlain};
         });
+
+        // Trigger OTP directly after transaction success
+        if (user.id) {
+            await createOtp(user.id);
+        }
+
+        logger.info("User signed up, OTP sent", { userId: user.id, role });
+        return { user };
     } catch (error: any) {
         // Log the error for debugging
         logger.error("Signup failed", { email: normalizedEmail, error: (error as Error).message });
@@ -119,6 +107,12 @@ export const login = async (email: string, password: string) => {
         if (!user.id) throw new AuthError("User ID is required", apiStatusCode.InternalServerError);
         const refreshPlain = randomTokenHex(64);
         const refreshHash = hashToken(refreshPlain);
+
+        // Enforce ONE active refresh token per user globally
+        await prisma.refreshToken.deleteMany({
+            where: { userId: user.id }
+        });
+
         await prisma.refreshToken.create({
             data: {
                 user: { connect: { id: user.id } },
@@ -253,25 +247,25 @@ export const requestForgotPassword = async (email: string) => {
         });
         if (!user) throw new Error("User not found");
 
-        // create forgot password token
-        const tokenPlain = randomTokenHex(32);
+        // create forgot password OTP
+        const otp = (Math.floor(100000 + Math.random() * 900000)).toString(); // 6-digit OTP
         await prisma.emailToken.create({
             data: {
                 user: { connect: { id: user.id } },
-                tokenHash: hashToken(tokenPlain),
+                tokenHash: hashToken(otp),
                 purpose: "FORGOT_PASSWORD",
-                expiresAt: new Date(Date.now() + 60 * 60 * 1000) // 1 hour
+                expiresAt: new Date(Date.now() + 10 * 60 * 1000) // 10 mins
             }
         });
 
         // send forgot password email
-        const link = `${process.env.FRONTEND_URL}/reset-password?uid=${user.id}&token=${tokenPlain}`;
+        const link = `${process.env.FRONTEND_URL}/otp?uid=${user.id}`;
         sendEmail(
             user.email,
             "Reset your password",
-            getForgotPasswordEmail(user.username, link)
+            getForgotPasswordOtpEmail(user.username, otp, link)
         ).catch(console.error);
-        return { user, tokenPlain };
+        return { user, tokenPlain: otp };
     } catch (error) {
         console.error("Request forgot password service error:", error);
         throw error;
@@ -321,7 +315,7 @@ export const resetPassword = async (userId: string, token: string, newPassword: 
     }
 }
 
-// Verify email service
+// Verify email service......not use any more ........
 export const verifyEmailToken = async (userId: string, token: string) => {
     try {
         if (!userId || !token) throw new Error(`Invalid request status code: ${apiStatusCode.NotFound}`);
@@ -400,20 +394,36 @@ export const verifyOtp = async (userId: string, otp: string) => {
             where: {
                 userId,
                 tokenHash: otpHash,
-                purpose: "OTP",
+                purpose: { in: ["OTP", "FORGOT_PASSWORD"] },
                 used: false
             }
         });
         if (!entry || entry.expiresAt < new Date()) throw new Error("Invalid or expired OTP");
 
-        // mark OTP as used
-        await prisma.emailToken.update({
-            where: {
-                id: entry.id
-            },
-            data: {
-                used: true
-            }
+        // If it is a forgot password OTP, we simply verify it is valid.
+        // We DO NOT mark it as used yet; it will be marked used when they actually reset the password.
+        if (entry.purpose === "FORGOT_PASSWORD") {
+            return true;
+        }
+
+        // mark OTP as used and user email as verified
+        await prisma.$transaction(async (tx: any) => {
+            await tx.user.update({
+                where: {
+                    id: userId
+                },
+                data: {
+                    isEmailVerified: true
+                }
+            });
+            await tx.emailToken.update({
+                where: {
+                    id: entry.id
+                },
+                data: {
+                    used: true
+                }
+            });
         });
         return true;
     } catch (error) {
