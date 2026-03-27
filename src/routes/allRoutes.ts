@@ -7,6 +7,7 @@ import productRouter from "./product.routes";
 import vendorRouter from "./vendor.routes";
 import reviewRouter from "./review.routes";
 import addressRouter from "./address.routes";
+import topBarNotificationRouter from "./topBarNotification.routes";
 
 const rootRouter: Router = Router();
 
@@ -18,5 +19,6 @@ rootRouter.use("/products", productRouter);
 rootRouter.use("/vendors", vendorRouter);
 rootRouter.use("/reviews", reviewRouter);
 rootRouter.use("/addresses", addressRouter);
+rootRouter.use("/notification-bar", topBarNotificationRouter);
 
 export default rootRouter;

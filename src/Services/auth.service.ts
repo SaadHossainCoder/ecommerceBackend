@@ -5,6 +5,7 @@ import { signAccessToken } from "../utils/token.utils";
 import { apiStatusCode } from "../lib/apiCode.lib";
 import prisma from "../prisma/client";
 import logger from "../lib/logger";
+import { Role } from "@prisma/client";
 
 // Custom errors
 export class AuthError extends Error {
@@ -19,8 +20,7 @@ export const signup = async (username: string, email: string, password: string, 
     const normalizedEmail = email.toLowerCase();
     const normalizedUsername = username.toLowerCase();
     try {
-        if (!email || !password || !username || role !== "USER") throw new Error(`Invalid request status code: ${apiStatusCode.NotFound}`);
-
+        if (!email || !password || !username || !role) throw new Error(`Invalid request status code: ${apiStatusCode.NotFound}`);
 
         const existing = await prisma.user.findFirst({
             where: {
@@ -42,7 +42,7 @@ export const signup = async (username: string, email: string, password: string, 
                     username: normalizedUsername.trim(),
                     email: normalizedEmail.trim(),
                     password: passwordHash.trim(),
-                    role,
+                    role: role.toUpperCase() as Role,
                 },
                 select: { id: true, username: true, email: true, role: true },
             });
@@ -53,7 +53,33 @@ export const signup = async (username: string, email: string, password: string, 
             await createOtp(user.id);
         }
 
-        logger.info("User signed up, OTP sent", { userId: user.id, role });
+        // create refresh token
+        if (!user.id) throw new AuthError("User ID is required", apiStatusCode.InternalServerError);
+        const refreshPlain = randomTokenHex(64);
+        const refreshHash = hashToken(refreshPlain);
+
+        // Enforce ONE active refresh token per user globally
+        await prisma.$transaction(async (tx) => {
+            const existingRefreshToken = await tx.refreshToken.findFirst({
+                where: { userId: user.id }
+            });
+
+            if (existingRefreshToken) {
+                await tx.refreshToken.delete({
+                    where: { id: existingRefreshToken.id }
+                });
+            }
+
+            await tx.refreshToken.create({
+                data: {
+                    user: { connect: { id: user.id } },
+                    tokenHash: refreshHash,
+                    expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000) // 30 days
+                }
+            });
+        });
+
+        logger.info("User signed up, OTP sent and refresh token created", { userId: user.id, role });
         return { user };
     } catch (error: any) {
         // Log the error for debugging
@@ -109,16 +135,24 @@ export const login = async (email: string, password: string) => {
         const refreshHash = hashToken(refreshPlain);
 
         // Enforce ONE active refresh token per user globally
-        await prisma.refreshToken.deleteMany({
-            where: { userId: user.id }
-        });
+        await prisma.$transaction(async (tx) => {
+            const existingRefreshToken = await tx.refreshToken.findFirst({
+                where: { userId: user.id }
+            });
 
-        await prisma.refreshToken.create({
-            data: {
-                user: { connect: { id: user.id } },
-                tokenHash: refreshHash,
-                expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000) // 30 days
+            if (existingRefreshToken) {
+                await tx.refreshToken.delete({
+                    where: { id: existingRefreshToken.id }
+                });
             }
+
+            await tx.refreshToken.create({
+                data: {
+                    user: { connect: { id: user.id } },
+                    tokenHash: refreshHash,
+                    expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000) // 30 days
+                }
+            });
         });
 
         logger.info("User logged in", { userId: user.id });
@@ -365,13 +399,25 @@ export const createOtp = async (userId: string) => {
         // Fetch user for name in template
         const user = await prisma.user.findUnique({ where: { id: userId }, select: { username: true, email: true } });
         
-        await prisma.emailToken.create({
-            data: {
-                user: { connect: { id: userId } },
-                tokenHash: otpHash,
-                purpose: "OTP",
-                expiresAt: new Date(Date.now() + 10 * 60 * 1000) // 10 minutes
+        await prisma.$transaction(async (tx) => {
+            const existingOtpToken = await tx.emailToken.findFirst({
+                where: { userId: userId }
+            });
+
+            if (existingOtpToken) {
+                await tx.emailToken.delete({
+                    where: { id: existingOtpToken.id }
+                });
             }
+
+            await tx.emailToken.create({
+                data: {
+                    user: { connect: { id: userId } },
+                    tokenHash: otpHash,
+                    purpose: "OTP",
+                    expiresAt: new Date(Date.now() + 10 * 60 * 1000) // 10 minutes
+                }
+            });
         });
 
         if (user) {
