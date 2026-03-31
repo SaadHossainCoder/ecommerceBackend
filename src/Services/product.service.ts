@@ -39,7 +39,7 @@ export const createProduct = async (data: {
 
         // Check if category exists and is not deleted
         const category = await prisma.category.findUnique({
-            where: { id: data.categoryId, deletedAt: null } as any
+            where: { id: data.categoryId} as any
         });
         if (!category) {
             throw new ProductError("Category not found or has been deleted", apiStatusCode.NotFound, "CATEGORY_NOT_FOUND");
@@ -55,7 +55,6 @@ export const createProduct = async (data: {
         // Check for duplicate slug or SKU (ignoring deleted products)
         const existing = await prisma.product.findFirst({
             where: {
-                deletedAt: null,
                 OR: [
                     { slug: data.slug.toLowerCase() },
                     { sku: data.sku.toUpperCase() }
@@ -81,7 +80,7 @@ export const createProduct = async (data: {
                 descriptionImages: data.descriptionImages?.map(img => img.url || img.public_url).filter(Boolean) as string[] || [],
                 sizes: data.sizes || [],
                 subProducts: data.subProducts || [],
-                ingredients: data.ingredients || null,
+                ingredients: data.ingredients || {},
             },
             include: {
                 category: {
@@ -407,7 +406,7 @@ export const updateProduct = async (id: string, data: Partial<{
             updateData.sizes = data.sizes;
         }
         if (data.subProducts) updateData.subProducts = data.subProducts;
-        if (data.ingredients !== undefined) updateData.ingredients = data.ingredients;
+        if (data.ingredients !== undefined) updateData.ingredients = data.ingredients ?? {};
 
         const updated = await prisma.product.update({
             where: { id },

@@ -145,3 +145,18 @@ export const getCategoryStatistics = async (req: Request, res: Response) => {
         return res.status(statusCode).json({ ok: false, message: error.message });
     }
 };
+
+// fully delete category (admin only)
+export const hardDeleteCategory = async (req: Request, res: Response) => {
+    try {
+        const { id } = req.params;
+        const result = await categoryService.hardDeleteCategory(id);
+        return res.status(apiStatusCode.Success).json({
+            ok: true,
+            ...result
+        });
+    } catch (error: any) {
+        const statusCode = error.statusCode || apiStatusCode.InternalServerError;
+        return res.status(statusCode).json({ ok: false, message: error.message });
+    }
+}
