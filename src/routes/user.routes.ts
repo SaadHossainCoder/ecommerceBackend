@@ -24,4 +24,12 @@ userRouter.get("/me", authGuard(), userController.getMe);
 userRouter.get("/users", authGuard(['ADMIN']), userController.getAllUsers);
 userRouter.delete("/user/:id", authGuard(['ADMIN']), userController.deleteUserById);
 
+// smart guards for frontend routing
+// user guard
+userRouter.get("/check-user-guard", userController.checkUserGuard);
+userRouter.post("/check-user-guard", userController.checkUserGuard);
+// admin guard
+userRouter.get("/check-admin-guard", userController.checkAdminGuard);
+userRouter.post("/check-admin-guard", userController.checkAdminGuard);
+
 export default userRouter;

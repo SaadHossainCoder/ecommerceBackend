@@ -1,7 +1,7 @@
 import { hashPassword, hashToken, randomTokenHex, verifyPassword } from "../utils/hash.utils"
 import { sendEmail } from "../utils/emailSend.utils"
 import { getForgotPasswordEmail, getOtpEmail, getVerificationEmail, getForgotPasswordOtpEmail } from "../utils/emailTemplates.utils";
-import { signAccessToken } from "../utils/token.utils";
+import { signAccessToken, verifyAccessToken } from "../utils/token.utils";
 import { apiStatusCode } from "../lib/apiCode.lib";
 import prisma from "../prisma/client";
 import logger from "../lib/logger";
@@ -546,5 +546,38 @@ export const deleteUserById = async (userId: string, adminId: string) => {
     } catch (error) {
         console.error("Delete user by id service error:", error);
         throw error;
+    }
+};
+
+// Smart frontend session verification service (Amazon/Flipkart grade sync check)
+export const verifyFrontendSession = (clientProvidedId: string | undefined, accessToken: string | undefined, requiredRole?: "ADMIN") => {
+    // 1. Check if token exists
+    if (!accessToken) {
+        return { isAuthorised: false, message: "There is no access token" };
+    }
+
+    try {
+        // 2. Verify token
+        const payload = verifyAccessToken(accessToken) as { id: string; role: string };
+
+        // 3. Optional client ID match check (prevents state mismatch between frontend local storage and httpOnly cookie)
+        if (clientProvidedId && payload.id !== clientProvidedId) {
+            return { isAuthorised: false, message: "User not authorised" };
+        }
+
+        // 4. Role check for admin
+        if (requiredRole === "ADMIN" && payload.role !== "ADMIN") {
+            return { isAuthorised: false, message: "Admin not authorised" };
+        }
+
+        // 5. Success - returning exact payload needed for the client
+        return { 
+            isAuthorised: true, 
+            user: { id: payload.id, role: payload.role },
+            message: requiredRole === "ADMIN" ? "Admin access granted" : "User access granted"
+        };
+    } catch (error) {
+        // Token is invalid, expired, or malformed
+        return { isAuthorised: false, message: "User not authorised sumthing went wrong function" };
     }
 };

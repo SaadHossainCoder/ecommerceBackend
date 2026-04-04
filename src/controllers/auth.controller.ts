@@ -249,3 +249,39 @@ export const deleteUserById = async (req: AuthRequest, res: Response) => {
         return res.status(apiStatusCode.BadRequest).json({ ok: false, message: (error as Error).message });
     }
 };
+
+// check user guard controller (Smart frontend verification)
+export const checkUserGuard = async (req: AuthRequest, res: Response) => {
+    try {
+        const clientId = (req.query.id as string) || (req.body?.id as string);
+        const accessToken = req.cookies.accessToken;
+        const refreshToken = req.cookies[CONFIG.REFRESH_COOKIE_NAME];
+
+        if (!refreshToken) {
+            return res.status(400).json({ isAuthorised: false, message: "The user has to login now or register now" });
+        }
+
+        const data = authService.verifyFrontendSession(clientId, accessToken);
+        return res.status(200).json(data);
+    } catch (error) {
+        return res.status(400).json({ isAuthorised: false, message: (error as Error).message });
+    }
+};
+
+// check admin guard controller (Smart frontend verification)
+export const checkAdminGuard = async (req: AuthRequest, res: Response) => {
+    try {
+        const clientId = (req.query.id as string) || (req.body?.id as string);
+        const accessToken = req.cookies.accessToken;
+        const refreshToken = req.cookies[CONFIG.REFRESH_COOKIE_NAME];
+
+        if (!refreshToken) {
+            return res.status(400).json({ isAuthorised: false, message: "The user has to login now or register now" });
+        }
+
+        const data = authService.verifyFrontendSession(clientId, accessToken, "ADMIN");
+        return res.status(200).json(data);
+    } catch (error) {
+        return res.status(400).json({ isAuthorised: false, message: (error as Error).message });
+    }
+};
