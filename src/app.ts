@@ -16,7 +16,9 @@ const app = express();
 // 🌐 1. CORS
 // ----------------------
 app.use(cors({
-    origin: ["http://localhost:3000", process.env.FRONTEND_URL!],
+    origin: ["http://localhost:3000"
+        , process.env.FRONTEND_URL!
+    ],
     methods: ["GET", "POST", "PUT", "PATCH", "DELETE"],
     credentials: true,
 }));
