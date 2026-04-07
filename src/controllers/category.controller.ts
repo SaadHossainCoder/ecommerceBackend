@@ -1,5 +1,5 @@
 import { Request, Response } from "express";
-import * as categoryService from "../Services/category.service";
+import categoryService from "../Services/category.service";
 import { apiStatusCode } from "../lib/apiCode.lib";
 
 // Create Main Category
@@ -32,20 +32,23 @@ export const createSubCategory = async (req: Request, res: Response) => {
     }
 };
 
-// Get All Categories (Main Categories with Subs)
+// Get All Categories (with pagination and filters)
 export const getAllCategories = async (req: Request, res: Response) => {
     try {
-        const { page, limit, featured, includeProducts } = req.query as any;
+        const { page, limit, featured, includeProducts, search, parentId } = req.query as any;
         const result = await categoryService.getAllCategories({
             page,
             limit,
             featured,
-            includeProducts
+            includeProducts,
+            search,
+            parentId
         });
+        console.log("i am controller",result);
         return res.status(apiStatusCode.Success).json({
             ok: true,
             message: "Categories fetched successfully",
-            ...result
+            data: result // Result contains { data, pagination }
         });
     } catch (error: any) {
         const statusCode = error.statusCode || apiStatusCode.InternalServerError;
@@ -101,21 +104,6 @@ export const updateCategory = async (req: Request, res: Response) => {
     }
 };
 
-// Soft Delete Category
-export const deleteCategory = async (req: Request, res: Response) => {
-    try {
-        const { id } = req.params;
-        const result = await categoryService.deleteCategory(id);
-        return res.status(apiStatusCode.Success).json({
-            ok: true,
-            ...result
-        });
-    } catch (error: any) {
-        const statusCode = error.statusCode || apiStatusCode.InternalServerError;
-        return res.status(statusCode).json({ ok: false, message: error.message });
-    }
-};
-
 // Get Full Category Tree
 export const getCategoryTree = async (req: Request, res: Response) => {
     try {
@@ -146,7 +134,7 @@ export const getCategoryStatistics = async (req: Request, res: Response) => {
     }
 };
 
-// fully delete category (admin only)
+// Hard Delete Category
 export const hardDeleteCategory = async (req: Request, res: Response) => {
     try {
         const { id } = req.params;
@@ -159,4 +147,4 @@ export const hardDeleteCategory = async (req: Request, res: Response) => {
         const statusCode = error.statusCode || apiStatusCode.InternalServerError;
         return res.status(statusCode).json({ ok: false, message: error.message });
     }
-}
+};

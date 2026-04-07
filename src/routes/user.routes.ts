@@ -9,8 +9,8 @@ import rateLimit from "express-rate-limit";
 
 const userRouter = Router();
 
-userRouter.post("/signup", rateLimit({ windowMs: 15 * 60 * 1000, max: 5 }) , validateZod(z.signupSchema), userController.signup);
-userRouter.post("/login",rateLimit({ windowMs: 15 * 60 * 1000, max: 5 }), validateZod(z.loginSchema), userController.login);
+userRouter.post("/signup", rateLimit({ windowMs: 15 * 60 * 1000, max: 5 }), validateZod(z.signupSchema), userController.signup);
+userRouter.post("/login", rateLimit({ windowMs: 15 * 60 * 1000, max: 5 }), validateZod(z.loginSchema), userController.login);
 userRouter.post("/logout", userController.logout);
 userRouter.post("/refresh", userController.refresh);
 userRouter.post("/forgot", validateZod(z.forgotSchema), userController.requestForgotPassword);
@@ -26,10 +26,5 @@ userRouter.delete("/user/:id", authGuard(['ADMIN']), userController.deleteUserBy
 
 // smart guards for frontend routing
 // user guard
-userRouter.get("/check-user-guard", userController.checkUserGuard);
-userRouter.post("/check-user-guard", userController.checkUserGuard);
-// admin guard
-userRouter.get("/check-admin-guard", userController.checkAdminGuard);
-userRouter.post("/check-admin-guard", userController.checkAdminGuard);
-
+userRouter.get("/auth-guard", userController.checkUserGuard);
 export default userRouter;

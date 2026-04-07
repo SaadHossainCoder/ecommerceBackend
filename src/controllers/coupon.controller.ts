@@ -2,6 +2,45 @@ import { Response } from "express";
 import { AuthRequest } from "../types/express";
 import * as couponService from "../Services/coupon.service";
 import { apiStatusCode } from "../lib/apiCode.lib";
+import prisma from "../prisma/client";
+
+// Get Coupon Statistics
+export const getCouponStats = async (req: AuthRequest, res: Response) => {
+    try {
+        const coupons = await prisma.coupon.findMany({
+            select: {
+                usedCount: true,
+                isActive: true,
+                discountValue: true,
+                discountType: true
+            }
+        });
+
+        const totalUsage = coupons.reduce((sum, c) => sum + (c.usedCount || 0), 0);
+        const activeCampaigns = coupons.filter(c => c.isActive).length;
+
+        // Rough estimate of total savings (would need actual transaction data for accuracy)
+        const totalSavings = coupons.reduce((sum, c) => {
+            return sum + (c.discountType === "FIXED" ? (c.discountValue * (c.usedCount || 0)) : 0);
+        }, 0);
+
+        return res.status(apiStatusCode.Success).json({
+            ok: true,
+            message: "Statistics fetched successfully",
+            data: {
+                totalUsage,
+                activeCampaigns,
+                totalSavings
+            }
+        });
+    } catch (error: any) {
+        const statusCode = error.statusCode || apiStatusCode.InternalServerError;
+        return res.status(statusCode).json({
+            ok: false,
+            message: error.message || "Failed to fetch statistics"
+        });
+    }
+};
 
 // Create Coupon
 export const createCoupon = async (req: AuthRequest, res: Response) => {

@@ -2,855 +2,418 @@ import prisma from "../prisma/client";
 import { Prisma } from "@prisma/client";
 import { apiStatusCode } from "../lib/apiCode.lib";
 
-
-// Custom error class
-export class CategoryError extends Error {
-    constructor(message: string, public statusCode: number, public code?: string) {
-        super(message);
-        this.name = "CategoryError";
-    }
+// ================= TYPES =================
+export interface CategoryFilterOptions {
+  page?: number;
+  limit?: number;
+  featured?: boolean | string;
+  includeProducts?: boolean | string;
+  search?: string;
+  parentId?: string | null;
 }
 
-// ==================== CREATE OPERATIONS ====================
+// ================= ERROR =================
+export class CategoryError extends Error {
+  constructor(
+    message: string,
+    public statusCode: number = apiStatusCode.InternalServerError,
+    public code?: string
+  ) {
+    super(message);
+    this.name = "CategoryError";
+  }
+}
 
+// ================= UTILS =================
+const normalizeName = (value: string): string => value?.trim() || "";
+
+const normalizeSlug = (value: string): string =>
+  value
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9\s-]/g, "")
+    .replace(/\s+/g, "-")
+    .replace(/-+/g, "-");
+
+// ================= CREATE =================
 /**
- * Create main category (top-level category with no parent)
+ * Create a main category (root level)
  */
 export const createMainCategory = async (data: {
-    name: string;
-    slug: string;
-    featured?: boolean;
+  name: string;
+  icon?: string;
+  slug: string;
+  featured?: boolean;
 }) => {
-    try {
-        // Validate required fields
-        if (!data.name || !data.slug) {
-            throw new CategoryError("Name and slug are required", apiStatusCode.BadRequest, "MISSING_FIELDS");
-        }
-
-        // Check for duplicate name or slug
-        const existing = await prisma.category.findFirst({
-            where: {
-                OR: [
-                    { name: data.name.trim() },
-                    { slug: data.slug.toLowerCase().trim() }
-                ],
-                deletedAt: null
-            }
-        });
-
-        if (existing) {
-            throw new CategoryError("Category name or slug already exists", apiStatusCode.Conflict, "DUPLICATE_CATEGORY");
-        }
-
-        const category = await prisma.category.create({
-            data: {
-                name: data.name.trim(),
-                slug: data.slug.toLowerCase().trim(),
-                featured: data.featured || false,
-                parentCategoryId: null // Main category has no parent
-            },
-            include: {
-                subCategories: {
-                    where: { deletedAt: null },
-                    select: { id: true, name: true, slug: true }
-                },
-                parentCategory: {
-                    select: { id: true, name: true, slug: true }
-                },
-                _count: {
-                    select: { products: { where: { deletedAt: null } } }
-                }
-            }
-        });
-
-        return category;
-    } catch (error: any) {
-        if (error instanceof CategoryError) throw error;
-        console.error("Create main category error:", error);
-        throw new CategoryError(error?.message || "Failed to create category", apiStatusCode.InternalServerError);
+  try {
+    if (!data.name || !data.slug) {
+      throw new CategoryError("Name and slug are required", apiStatusCode.BadRequest);
     }
+
+    const name = normalizeName(data.name);
+    const slug = normalizeSlug(data.slug);
+
+    // Global unique slug check
+    const existingSlug = await prisma.category.findFirst({
+      where: { slug },
+    });
+    if (existingSlug) throw new CategoryError("Slug already in use", apiStatusCode.Conflict);
+
+    // Name unique among main categories
+    const existingName = await prisma.category.findFirst({
+      where: { name, parentCategoryId: null },
+    });
+    if (existingName) throw new CategoryError("Main category name already exists", apiStatusCode.Conflict);
+
+    return await prisma.category.create({
+      data: {
+        name,
+        icon: data.icon || "📁",
+        slug,
+        featured: data.featured ?? false,
+        parentCategoryId: null,
+      },
+    });
+  } catch (e: any) {
+    if (e instanceof CategoryError) throw e;
+    throw new CategoryError(e.message || "Failed to create main category");
+  }
 };
 
 /**
- * Create sub-category (nested under main category)
+ * Create a sub-category under a parent
  */
 export const createSubCategory = async (data: {
-    name: string;
-    slug: string;
-    parentCategoryId: string;
-    featured?: boolean;
+  name: string;
+  slug: string;
+  icon?: string;
+  parentCategoryId: string;
+  featured?: boolean;
 }) => {
-    try {
-        // Validate required fields
-        if (!data.name || !data.slug || !data.parentCategoryId) {
-            throw new CategoryError("Name, slug, and parentCategoryId are required", apiStatusCode.BadRequest, "MISSING_FIELDS");
-        }
-
-        // Verify parent category exists and is a main category (no parent itself)
-        const parentCategory = await prisma.category.findUnique({
-            where: { id: data.parentCategoryId }
-        });
-
-        if (!parentCategory) {
-            throw new CategoryError("Parent category not found", apiStatusCode.NotFound, "PARENT_NOT_FOUND");
-        }
-
-        // Optional: Ensure parent is a main category (parentCategoryId is null)
-        // Uncomment if you want to prevent nested sub-sub-categories
-        // if (parentCategory.parentCategoryId !== null) {
-        //     throw new CategoryError("Can only create sub-categories under main categories", 400, "INVALID_PARENT");
-        // }
-
-        // Check for duplicate slug under same parent
-        const existing = await prisma.category.findFirst({
-            where: {
-                slug: data.slug.toLowerCase().trim(),
-                parentCategoryId: data.parentCategoryId,
-                deletedAt: null
-            }
-        });
-
-        if (existing) {
-            throw new CategoryError("Sub-category slug already exists under this parent", apiStatusCode.Conflict, "DUPLICATE_SUBCATEGORY");
-        }
-
-        const subCategory = await prisma.category.create({
-            data: {
-                name: data.name.trim(),
-                slug: data.slug.toLowerCase().trim(),
-                featured: data.featured || false,
-                parentCategoryId: data.parentCategoryId
-            },
-            include: {
-                parentCategory: {
-                    select: { id: true, name: true, slug: true }
-                },
-                subCategories: {
-                    where: { deletedAt: null },
-                    select: { id: true, name: true, slug: true }
-                },
-                _count: {
-                    select: { products: { where: { deletedAt: null } } }
-                }
-            }
-        });
-
-        return subCategory;
-    } catch (error: any) {
-        if (error instanceof CategoryError) throw error;
-        console.error("Create sub-category error:", error);
-        throw new CategoryError(error?.message || "Failed to create sub-category", apiStatusCode.InternalServerError);
+  try {
+    if (!data.name || !data.slug || !data.parentCategoryId) {
+      throw new CategoryError("Missing required fields", apiStatusCode.BadRequest);
     }
+
+    const name = normalizeName(data.name);
+    const slug = normalizeSlug(data.slug);
+
+    const parent = await prisma.category.findUnique({
+      where: { id: data.parentCategoryId },
+    });
+    if (!parent) {
+      throw new CategoryError("Parent category not found", apiStatusCode.NotFound);
+    }
+
+    // Global unique slug check
+    const existingSlug = await prisma.category.findFirst({
+      where: { slug },
+    });
+    if (existingSlug) throw new CategoryError("Slug already in use", apiStatusCode.Conflict);
+
+    // Name unique under this parent
+    const existingName = await prisma.category.findFirst({
+      where: {
+        name,
+        parentCategoryId: data.parentCategoryId,
+      },
+    });
+    if (existingName) throw new CategoryError("Name already exists under this parent", apiStatusCode.Conflict);
+
+    return await prisma.category.create({
+      data: {
+        name,
+        slug,
+        icon: data.icon || "📁",
+        featured: data.featured ?? false,
+        parentCategoryId: data.parentCategoryId,
+      },
+    });
+  } catch (e: any) {
+    if (e instanceof CategoryError) throw e;
+    throw new CategoryError(e.message || "Failed to create sub-category");
+  }
 };
 
-// ==================== READ OPERATIONS ====================
-
+// ================= READ =================
 /**
- * Get all main categories with their sub-categories
+ * Get all categories with filtering and pagination
  */
-export const getAllCategories = async (options: {
-    page?: number;
-    limit?: number;
-    featured?: boolean;
-    includeProducts?: boolean;
-} = {}) => {
-    try {
-        const page = Math.max(1, options.page || 1);
-        const limit = Math.min(100, Math.max(1, options.limit || 10));
-        const skip = (page - 1) * limit;
+export const getAllCategories = async (options: CategoryFilterOptions = {}) => {
+  try {
+    const page = Number(options.page) > 0 ? Number(options.page) : 1;
+    const limit = Math.min(100, Number(options.limit) || 10);
+    const skip = (page - 1) * limit;
 
-        const where: Prisma.CategoryWhereInput = {
-            deletedAt: null,
-            parentCategoryId: null,
-            ...(options.featured !== undefined ? { featured: options.featured } : {})
-        };
+    // ✅ SIMPLE WHERE (NO COMPLEX AND ARRAY)
+    const where: Prisma.CategoryWhereInput = {};
 
-        const [categories, total] = await Promise.all([
-            prisma.category.findMany({
-                where,
-                orderBy: { createdAt: "desc" },
-                skip,
-                take: limit,
-                include: {
-                    subCategories: {
-                        where: { deletedAt: null },
-                        orderBy: { createdAt: "asc" },
-                        select: {
-                            id: true,
-                            name: true,
-                            slug: true,
-                            featured: true,
-                            createdAt: true,
-                            _count: options.includeProducts
-                                ? { select: { products: { where: { deletedAt: null } } } }
-                                : undefined
-                        }
-                    },
-                    _count: {
-                        select: {
-                            products: { where: { deletedAt: null } },
-                            subCategories: { where: { deletedAt: null } }
-                        }
-                    }
-                }
-            }),
-            prisma.category.count({ where })
-        ]);
-
-        return {
-            data: categories,
-            pagination: {
-                total,
-                page,
-                limit,
-                pages: Math.ceil(total / limit),
-                hasNext: page < Math.ceil(total / limit),
-                hasPrev: page > 1
-            }
-        };
-    } catch (error: any) {
-        console.error("Get all categories error:", error);
-        throw new CategoryError(error?.message || "Failed to fetch categories", apiStatusCode.InternalServerError);
+    // ✅ OPTIONAL FILTERS
+    if (options.featured !== undefined) {
+      where.featured = options.featured === "true" || options.featured === true;
     }
-};
 
-/**
- * Get category by ID with full hierarchy
- */
-export const getCategoryById = async (id: string) => {
-    try {
-        if (!id) {
-            throw new CategoryError("Category ID is required", apiStatusCode.BadRequest, "MISSING_ID");
-        }
-
-        // Use findUnique by ID only — do NOT filter deletedAt here.
-        // In Prisma + MongoDB, absent optional fields behave differently from null,
-        // so { deletedAt: null } in the where clause can silently miss valid documents.
-        const category = await prisma.category.findUnique({
-            where: { id },
-            include: {
-                parentCategory: {
-                    select: { id: true, name: true, slug: true }
-                },
-                subCategories: {
-                    where: { deletedAt: null },
-                    orderBy: { createdAt: "asc" },
-                    select: {
-                        id: true,
-                        name: true,
-                        slug: true,
-                        featured: true,
-                        createdAt: true,
-                        _count: {
-                            select: { products: { where: { deletedAt: null } } }
-                        }
-                    }
-                },
-                products: {
-                    where: { deletedAt: null },
-                    take: 5,
-                    select: {
-                        id: true,
-                        title: true,
-                        slug: true,
-                        rating: true
-                    }
-                },
-                _count: {
-                    select: {
-                        products: { where: { deletedAt: null } },
-                        subCategories: { where: { deletedAt: null } }
-                    }
-                }
-            }
-        });
-
-        if (!category) {
-            throw new CategoryError("Category not found", apiStatusCode.NotFound, "CATEGORY_NOT_FOUND");
-        }
-
-        // Check soft-delete AFTER fetching — gives a clear distinction:
-        // 404 = never existed, 410 = existed but was deleted
-        if (category.deletedAt !== null) {
-            throw new CategoryError("Category has been deleted", 410, "CATEGORY_DELETED");
-        }
-
-        return category;
-    } catch (error: any) {
-        if (error instanceof CategoryError) throw error;
-        console.error("Get category by ID error:", error);
-        throw new CategoryError(error?.message || "Failed to fetch category", apiStatusCode.InternalServerError);
+    if (options.parentId !== undefined) {
+      where.parentCategoryId =
+        options.parentId === "null" ? null : options.parentId;
     }
-};
 
-/**
- * Get category by slug
- */
-export const getCategoryBySlug = async (slug: string) => {
-    try {
-        if (!slug) {
-            throw new CategoryError("Category slug is required", apiStatusCode.BadRequest, "MISSING_SLUG");
-        }
-
-        const category = await prisma.category.findFirst({
-            where: { slug: slug.toLowerCase(), deletedAt: null },
-            include: {
-                parentCategory: {
-                    select: { id: true, name: true, slug: true }
-                },
-                subCategories: {
-                    where: { deletedAt: null },
-                    orderBy: { createdAt: "asc" },
-                    select: {
-                        id: true,
-                        name: true,
-                        slug: true,
-                        featured: true
-                    }
-                },
-                products: {
-                    where: { deletedAt: null },
-                    take: 10,
-                    orderBy: { createdAt: "desc" },
-                    select: {
-                        id: true,
-                        title: true,
-                        slug: true,
-                        rating: true,
-                        sold: true
-                    }
-                },
-                _count: {
-                    select: {
-                        products: { where: { deletedAt: null } },
-                        subCategories: { where: { deletedAt: null } }
-                    }
-                }
-            }
-        });
-
-        if (!category) {
-            throw new CategoryError("Category not found", apiStatusCode.NotFound, "CATEGORY_NOT_FOUND");
-        }
-
-        return category;
-    } catch (error: any) {
-        if (error instanceof CategoryError) throw error;
-        console.error("Get category by slug error:", error);
-        throw new CategoryError(error?.message || "Failed to fetch category", apiStatusCode.InternalServerError);
+    if (options.search) {
+      where.OR = [
+        { name: { contains: options.search, mode: "insensitive" } },
+        { slug: { contains: options.search, mode: "insensitive" } }
+      ];
     }
-};
 
-/**
- * Get featured categories
- */
-export const getFeaturedCategories = async (limit: number = 6) => {
-    try {
-        const categories = await prisma.category.findMany({
-            where: { featured: true, deletedAt: null, parentCategoryId: null },
-            orderBy: { createdAt: "desc" },
-            take: limit,
-            include: {
-                subCategories: {
-                    where: { deletedAt: null },
-                    select: { id: true, name: true, slug: true }
-                },
-                _count: {
-                    select: { products: { where: { deletedAt: null } } }
-                }
+    // ✅ QUERY (ONLY WHAT YOU NEED)
+    const [data, total] = await Promise.all([
+      prisma.category.findMany({
+        where,
+        orderBy: { createdAt: "desc" },
+        skip,
+        take: limit,
+        include: {
+          _count: {
+            select: {
+              products: true,
+              subCategories: true
             }
-        });
-
-        return categories;
-    } catch (error: any) {
-        console.error("Get featured categories error:", error);
-        throw new CategoryError(error?.message || "Failed to fetch featured categories", apiStatusCode.InternalServerError);
-    }
-};
-
-/**
- * Get sub-categories by parent ID
- */
-export const getSubCategoriesByParentId = async (parentId: string, options: {
-    page?: number;
-    limit?: number;
-} = {}) => {
-    try {
-        if (!parentId) {
-            throw new CategoryError("Parent category ID is required", apiStatusCode.BadRequest, "MISSING_ID");
+          }
         }
+      }),
+      prisma.category.count({ where })
+    ]);
 
-        const page = Math.max(1, options.page || 1);
-        const limit = Math.min(100, Math.max(1, options.limit || 10));
-        const skip = (page - 1) * limit;
+    return {
+      data,
+      pagination: {
+        total,
+        page,
+        limit,
+        pages: Math.ceil(total / limit),
+        hasNext: page * limit < total,
+        hasPrev: page > 1
+      }
+    };
 
-        // Verify parent exists
-        const parent = await prisma.category.findUnique({
-            where: { id: parentId }
-        });
-
-        if (!parent) {
-            throw new CategoryError("Parent category not found", apiStatusCode.NotFound, "PARENT_NOT_FOUND");
-        }
-
-        const [subCategories, total] = await Promise.all([
-            prisma.category.findMany({
-                where: { parentCategoryId: parentId, deletedAt: null },
-                orderBy: { createdAt: "asc" },
-                skip,
-                take: limit,
-                include: {
-                    _count: {
-                        select: { products: { where: { deletedAt: null } } }
-                    }
-                }
-            }),
-            prisma.category.count({
-                where: { parentCategoryId: parentId, deletedAt: null }
-            })
-        ]);
-
-        return {
-            data: subCategories,
-            pagination: {
-                total,
-                page,
-                limit,
-                pages: Math.ceil(total / limit)
-            }
-        };
-    } catch (error: any) {
-        if (error instanceof CategoryError) throw error;
-        console.error("Get sub-categories error:", error);
-        throw new CategoryError(error?.message || "Failed to fetch sub-categories", apiStatusCode.InternalServerError);
-    }
+  } catch (error: any) {
+    throw new CategoryError(
+      error.message || "Failed to fetch categories",
+      500
+    );
+  }
 };
-
 /**
- * Get full category tree (hierarchy)
+ * Get category tree (nested structure)
  */
 export const getCategoryTree = async () => {
-    try {
-        const categories = await prisma.category.findMany({
-            where: { deletedAt: null, parentCategoryId: null },
-            orderBy: { createdAt: "desc" },
-            include: {
-                subCategories: {
-                    where: { deletedAt: null },
-                    orderBy: { createdAt: "asc" },
-                    include: {
-                        subCategories: {
-                            where: { deletedAt: null },
-                            orderBy: { createdAt: "asc" }
-                        },
-                        _count: {
-                            select: { products: { where: { deletedAt: null } } }
-                        }
-                    }
-                },
-                _count: {
-                    select: {
-                        products: { where: { deletedAt: null } },
-                        subCategories: { where: { deletedAt: null } }
-                    }
-                }
-            }
-        });
-
-        return categories;
-    } catch (error: any) {
-        console.error("Get category tree error:", error);
-        throw new CategoryError(error?.message || "Failed to fetch category tree", apiStatusCode.InternalServerError);
-    }
-};
-
-/**
- * Search categories by name
- */
-export const searchCategories = async (query: string, limit: number = 20) => {
-    try {
-        if (!query || query.trim().length < 2) {
-            throw new CategoryError("Search query must be at least 2 characters", apiStatusCode.BadRequest, "INVALID_SEARCH");
+  try {
+    const categories = await prisma.category.findMany({
+      include: {
+        _count: {
+          select: {
+            products: true,
+            subCategories: true
+          }
         }
+      },
+      orderBy: { name: "asc" }
+    });
 
-        const categories = await prisma.category.findMany({
-            where: {
-                deletedAt: null,
-                name: { contains: query, mode: "insensitive" }
-            },
-            take: limit,
-            select: {
-                id: true,
-                name: true,
-                slug: true,
-                featured: true,
-                parentCategoryId: true,
-                _count: {
-                    select: { products: { where: { deletedAt: null } } }
-                }
-            }
-        });
+    const categoryMap = new Map<string, any>();
+    const tree: any[] = [];
 
-        return categories;
-    } catch (error: any) {
-        if (error instanceof CategoryError) throw error;
-        console.error("Search categories error:", error);
-        throw new CategoryError(error?.message || "Failed to search categories", apiStatusCode.InternalServerError);
-    }
+    // Initialize map and prepare objects
+    categories.forEach(cat => {
+      categoryMap.set(cat.id, { ...cat, subCategories: [] });
+    });
+
+    // Build tree
+    categoryMap.forEach(cat => {
+      if (cat.parentCategoryId) {
+        const parent = categoryMap.get(cat.parentCategoryId);
+        if (parent) {
+          parent.subCategories.push(cat);
+        } else {
+          // If parent is deleted or not found, treat as root or skip
+          tree.push(cat);
+        }
+      } else {
+        tree.push(cat);
+      }
+    });
+
+    return tree;
+  } catch (error: any) {
+    throw new CategoryError(error.message || "Failed to build category tree");
+  }
 };
 
-// ==================== UPDATE OPERATIONS ====================
+/**
+ * Get single category by ID
+ */
+export const getCategoryById = async (id: string) => {
+  if (!id) throw new CategoryError("Category ID is required", apiStatusCode.BadRequest);
+
+  const category = await prisma.category.findUnique({
+    where: { id },
+    include: {
+      parentCategory: true,
+      subCategories: true,
+      _count: { select: { products: true } }
+    }
+  });
+
+  if (!category) {
+    throw new CategoryError("Category not found", apiStatusCode.NotFound);
+  }
+
+  return category;
+};
 
 /**
- * Update category
+ * Get category by Slug
+ */
+export const getCategoryBySlug = async (slug: string) => {
+  if (!slug) throw new CategoryError("Slug is required", apiStatusCode.BadRequest);
+
+  const category = await prisma.category.findFirst({
+    where: { slug: slug.toLowerCase().trim() },
+    include: {
+      subCategories: true,
+      _count: { select: { products: true } }
+    }
+  });
+
+  if (!category) throw new CategoryError("Category not found", apiStatusCode.NotFound);
+  return category;
+};
+
+// ================= UPDATE =================
+/**
+ * Update existing category
  */
 export const updateCategory = async (id: string, data: Partial<{
-    name: string;
-    slug: string;
-    featured: boolean;
-    parentCategoryId: string | null;
+  name: string;
+  slug: string;
+  icon: string;
+  featured: boolean;
+  parentCategoryId: string | null;
 }>) => {
-    try {
-        if (!id) {
-            throw new CategoryError("Category ID is required", apiStatusCode.BadRequest, "MISSING_ID");
-        }
+  try {
+    if (!id) throw new CategoryError("ID required", apiStatusCode.BadRequest);
 
-        // Check category exists
-        const category = await prisma.category.findUnique({
-            where: { id }
-        });
-
-        if (!category) {
-            throw new CategoryError("Category not found", apiStatusCode.NotFound, "CATEGORY_NOT_FOUND");
-        }
-
-        // Check for duplicate name or slug if provided
-        if (data.name || data.slug) {
-            const existing = await prisma.category.findFirst({
-                where: {
-                    OR: [
-                        ...(data.name ? [{ name: data.name.trim() }] : []),
-                        ...(data.slug ? [{ slug: data.slug.toLowerCase().trim() }] : [])
-                    ],
-                    NOT: { id },
-                    deletedAt: null
-                }
-            });
-
-            if (existing) {
-                throw new CategoryError("Category name or slug already exists", apiStatusCode.Conflict, "DUPLICATE_CATEGORY");
-            }
-        }
-
-        // Validate parent category if changing
-        if (data.parentCategoryId !== undefined && data.parentCategoryId !== null) {
-            const parent = await prisma.category.findUnique({
-                where: { id: data.parentCategoryId }
-            });
-
-            if (!parent) {
-                throw new CategoryError("Parent category not found", apiStatusCode.NotFound, "PARENT_NOT_FOUND");
-            }
-
-            // Prevent circular references (child becomes parent of parent)
-            if (data.parentCategoryId === id) {
-                throw new CategoryError("Category cannot be its own parent", apiStatusCode.BadRequest, "CIRCULAR_REFERENCE");
-            }
-        }
-
-        const updateData: any = {};
-        if (data.name) updateData.name = data.name.trim();
-        if (data.slug) updateData.slug = data.slug.toLowerCase().trim();
-        if (data.featured !== undefined) updateData.featured = data.featured;
-        if (data.parentCategoryId !== undefined) updateData.parentCategoryId = data.parentCategoryId;
-
-        const updated = await prisma.category.update({
-            where: { id },
-            data: updateData,
-            include: {
-                parentCategory: {
-                    select: { id: true, name: true, slug: true }
-                },
-                subCategories: {
-                    where: { deletedAt: null },
-                    select: { id: true, name: true, slug: true }
-                },
-                _count: {
-                    select: {
-                        products: { where: { deletedAt: null } },
-                        subCategories: { where: { deletedAt: null } }
-                    }
-                }
-            }
-        });
-
-        return updated;
-    } catch (error: any) {
-        if (error instanceof CategoryError) throw error;
-        console.error("Update category error:", error);
-        throw new CategoryError(error?.message || "Failed to update category", apiStatusCode.InternalServerError);
+    const category = await prisma.category.findUnique({ where: { id } });
+    if (!category) {
+      throw new CategoryError("Category not found", apiStatusCode.NotFound);
     }
+
+    const updateData: any = {};
+
+    if (data.name !== undefined) updateData.name = normalizeName(data.name);
+    if (data.slug !== undefined) updateData.slug = normalizeSlug(data.slug);
+    if (data.icon !== undefined) updateData.icon = data.icon;
+    if (data.featured !== undefined) updateData.featured = data.featured;
+    
+    if (data.parentCategoryId !== undefined) {
+      // Prevent self-parenting
+      if (data.parentCategoryId === id) {
+        throw new CategoryError("Cannot set category as its own parent", apiStatusCode.BadRequest);
+      }
+      
+      // Validate parent exists if not null
+      if (data.parentCategoryId !== null) {
+        const parent = await prisma.category.findUnique({ where: { id: data.parentCategoryId } });
+        if (!parent) {
+          throw new CategoryError("Parent category not found", apiStatusCode.NotFound);
+        }
+      }
+      updateData.parentCategoryId = data.parentCategoryId;
+    }
+
+    // Duplicate checks
+    if (updateData.name && updateData.name !== category.name) {
+      const existing = await prisma.category.findFirst({
+        where: {
+          name: updateData.name,
+          parentCategoryId: updateData.parentCategoryId ?? category.parentCategoryId,
+          id: { not: id }
+        }
+      });
+      if (existing) throw new CategoryError("Category name already exists at this level", apiStatusCode.Conflict);
+    }
+
+    if (updateData.slug && updateData.slug !== category.slug) {
+      const existing = await prisma.category.findFirst({
+        where: { slug: updateData.slug, id: { not: id } }
+      });
+      if (existing) throw new CategoryError("Slug already in use", apiStatusCode.Conflict);
+    }
+
+    return await prisma.category.update({
+      where: { id },
+      data: updateData,
+    });
+  } catch (e: any) {
+    if (e instanceof CategoryError) throw e;
+    throw new CategoryError(e.message || "Failed to update category");
+  }
 };
 
-// ==================== DELETE OPERATIONS ====================
+// ================= DELETE =================
 
 /**
- * Soft delete category (mark as deleted)
+ * Hard delete a category (Cascades to subcategories and products)
  */
-export const deleteCategory = async (id: string) => {
-    try {
-        if (!id) {
-            throw new CategoryError("Category ID is required", apiStatusCode.BadRequest, "MISSING_ID");
-        }
-
-        const category = await prisma.category.findUnique({
-            where: { id }
-        });
-
-        if (!category) {
-            throw new CategoryError("Category not found", apiStatusCode.NotFound, "CATEGORY_NOT_FOUND");
-        }
-
-        // Check if category has products
-        const productCount = await prisma.product.count({
-            where: { categoryId: id, deletedAt: null }
-        });
-
-        if (productCount > 0) {
-            throw new CategoryError(
-                `Cannot delete category with ${productCount} active products. Delete or move products first.`,
-                apiStatusCode.Conflict,
-                "CATEGORY_HAS_PRODUCTS"
-            );
-        }
-
-        // Soft delete the category
-        const deleted = await prisma.category.update({
-            where: { id },
-            data: { deletedAt: new Date() }
-        });
-
-        return { message: "Category deleted successfully", category: deleted };
-    } catch (error: any) {
-        if (error instanceof CategoryError) throw error;
-        console.error("Delete category error:", error);
-        throw new CategoryError(error?.message || "Failed to delete category", apiStatusCode.InternalServerError);
-    }
-};
-
-/**
- * Permanently delete category (hard delete - use with caution)
- */
-export const permanentlyDeleteCategory = async (id: string, cascade: boolean = false) => {
-    try {
-        if (!id) {
-            throw new CategoryError("Category ID is required", apiStatusCode.BadRequest, "MISSING_ID");
-        }
-
-        const category = await prisma.category.findUnique({
-            where: { id }
-        });
-
-        if (!category) {
-            throw new CategoryError("Category not found", apiStatusCode.NotFound, "CATEGORY_NOT_FOUND");
-        }
-
-        // Check for products
-        const productCount = await prisma.product.count({
-            where: { categoryId: id }
-        });
-
-        if (productCount > 0 && !cascade) {
-            throw new CategoryError(
-                `Cannot delete category with products. Set cascade=true to delete associated products.`,
-                apiStatusCode.Conflict,
-                "CATEGORY_HAS_PRODUCTS"
-            );
-        }
-
-        if (cascade) {
-            // Delete products associated with this category
-            await prisma.product.deleteMany({
-                where: { categoryId: id }
-            });
-        }
-
-        // Delete the category
-        await prisma.category.delete({
-            where: { id }
-        });
-
-        return { message: "Category permanently deleted successfully" };
-    } catch (error: any) {
-        if (error?.code === 'P2025') {
-            throw new CategoryError("Category not found", apiStatusCode.NotFound, "CATEGORY_NOT_FOUND");
-        }
-        console.error("Permanently delete category error:", error);
-        throw new CategoryError(error?.message || "Failed to delete category", apiStatusCode.InternalServerError);
-    }
-};
-
-// ==================== STATISTICS & UTILITY ====================
-
-/**
- * Get category statistics
- */
-export const getCategoryStatistics = async () => {
-    try {
-        const [
-            totalCategories,
-            totalMainCategories,
-            totalSubCategories,
-            categoriesWithProducts,
-            emptyCategories,
-            featuredCategories,
-            mostPopularCategory
-        ] = await Promise.all([
-            prisma.category.count({ where: { deletedAt: null } }),
-            prisma.category.count({ where: { deletedAt: null, parentCategoryId: null } }),
-            prisma.category.count({ where: { deletedAt: null, parentCategoryId: { not: null } } }),
-            prisma.category.count({
-                where: {
-                    deletedAt: null,
-                    products: { some: { deletedAt: null } }
-                }
-            }),
-            prisma.category.count({
-                where: {
-                    deletedAt: null,
-                    products: { none: { deletedAt: null } }
-                }
-            }),
-            prisma.category.count({ where: { featured: true, deletedAt: null } }),
-            prisma.category.findFirst({
-                where: { deletedAt: null },
-                orderBy: {
-                    products: {
-                        _count: "desc"
-                    }
-                },
-                select: { id: true, name: true, _count: { select: { products: true } } }
-            })
-        ]);
-
-        return {
-            totalCategories,
-            totalMainCategories,
-            totalSubCategories,
-            categoriesWithProducts,
-            emptyCategories,
-            featuredCategories,
-            mostPopularCategory
-        };
-    } catch (error: any) {
-        console.error("Get category statistics error:", error);
-        throw new CategoryError(error?.message || "Failed to fetch statistics", apiStatusCode.InternalServerError);
-    }
-};
-
-/**
- * Get categories by level (main or sub)
- */
-export const getCategoriesByLevel = async (level: "main" | "sub", options: {
-    page?: number;
-    limit?: number;
-} = {}) => {
-    try {
-        const page = Math.max(1, options.page || 1);
-        const limit = Math.min(100, Math.max(1, options.limit || 10));
-        const skip = (page - 1) * limit;
-
-        const where: Prisma.CategoryWhereInput = {
-            deletedAt: null,
-            ...(level === "main" ? { parentCategoryId: null } : { parentCategoryId: { not: null } })
-        };
-
-        const [categories, total] = await Promise.all([
-            prisma.category.findMany({
-                where,
-                orderBy: { createdAt: "desc" },
-                skip,
-                take: limit,
-                include: {
-                    parentCategory: {
-                        select: { id: true, name: true, slug: true }
-                    },
-                    subCategories: {
-                        where: { deletedAt: null },
-                        select: { id: true, name: true }
-                    },
-                    _count: {
-                        select: { products: { where: { deletedAt: null } } }
-                    }
-                }
-            }),
-            prisma.category.count({ where })
-        ]);
-
-        return {
-            data: categories,
-            pagination: {
-                total,
-                page,
-                limit,
-                pages: Math.ceil(total / limit)
-            }
-        };
-    } catch (error: any) {
-        console.error("Get categories by level error:", error);
-        throw new CategoryError(error?.message || "Failed to fetch categories", apiStatusCode.InternalServerError);
-    }
-};
-
-/**
- * Bulk update category featured status
- */
-export const bulkUpdateFeatured = async (categoryIds: string[], featured: boolean) => {
-    try {
-        if (!categoryIds || categoryIds.length === 0) {
-            throw new CategoryError("Category IDs are required", apiStatusCode.BadRequest, "MISSING_IDS");
-        }
-
-        const result = await prisma.category.updateMany({
-            where: {
-                id: { in: categoryIds },
-                deletedAt: null
-            },
-            data: { featured }
-        });
-
-        return {
-            message: `Updated ${result.count} categories`,
-            count: result.count
-        };
-    } catch (error: any) {
-        if (error instanceof CategoryError) throw error;
-        console.error("Bulk update featured error:", error);
-        throw new CategoryError(error?.message || "Failed to update categories", apiStatusCode.InternalServerError);
-    }
-};
-
-// fully delete category (admin only)
 export const hardDeleteCategory = async (id: string) => {
-    try {
-        if (!id) {
-            throw new CategoryError("Category ID is required", apiStatusCode.BadRequest, "MISSING_ID");
-        }
-        const category = await prisma.category.findUnique({
-            where: { id }
-        }); 
-        if (!category) {
-            throw new CategoryError("Category not found", apiStatusCode.NotFound, "CATEGORY_NOT_FOUND");
-        }   
-        await prisma.category.delete({
-            where: { id }
-        });
-        return { message: "Category permanently deleted successfully" };
-    } catch (error: any) {
-        if (error?.code === 'P2025') {
-            throw new CategoryError("Category not found", apiStatusCode.NotFound, "CATEGORY_NOT_FOUND");
-        }
-        console.error("Hard delete category error:", error);
-        throw new CategoryError(error?.message || "Failed to delete category", apiStatusCode.InternalServerError);
-    }
+  return prisma.$transaction(async (tx) => {
+    const category = await tx.category.findUnique({ where: { id } });
+    if (!category) throw new CategoryError("Category not found", apiStatusCode.NotFound);
+
+    const deleteRecursive = async (catId: string) => {
+      const subs = await tx.category.findMany({
+        where: { parentCategoryId: catId },
+        select: { id: true }
+      });
+
+      for (const sub of subs) {
+        await deleteRecursive(sub.id);
+      }
+
+      await tx.product.deleteMany({ where: { categoryId: catId } });
+      await tx.category.delete({ where: { id: catId } });
+    };
+
+    await deleteRecursive(id);
+    return { message: "Category and all its descendants deleted permanently" };
+  });
+};
+
+// ================= STATS =================
+export const getCategoryStatistics = async () => {
+  const [total, main, sub, products] = await Promise.all([
+    prisma.category.count(),
+    prisma.category.count({ where: { parentCategoryId: null } }),
+    prisma.category.count({ where: { parentCategoryId: { not: null } } }),
+    prisma.product.count()
+  ]);
+
+  return {
+    totalCategories: total,
+    mainCategories: main,
+    subCategories: sub,
+    totalProductsInSystem: products
+  };
+};
+
+export default {
+  createMainCategory,
+  createSubCategory,
+  getAllCategories,
+  getCategoryById,
+  getCategoryBySlug,
+  getCategoryTree,
+  updateCategory,
+  hardDeleteCategory,
+  getCategoryStatistics
 };

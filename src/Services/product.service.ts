@@ -2,16 +2,33 @@ import prisma from "../prisma/client";
 import { apiStatusCode } from "../lib/apiCode.lib";
 import { Prisma } from "@prisma/client";
 
-// Custom error class
+// ====================== CUSTOM ERROR CLASS ======================
 export class ProductError extends Error {
-    constructor(message: string, public statusCode: number, public code?: string) {
+    constructor(
+        message: string,
+        public statusCode: number = apiStatusCode.InternalServerError,
+        public code?: string
+    ) {
         super(message);
         this.name = "ProductError";
     }
 }
 
-// ==================== CREATE OPERATIONS ====================
+// ====================== TYPES ======================
+export interface ProductFilterOptions {
+    page?: number;
+    limit?: number;
+    categoryId?: string;
+    featured?: boolean | string;
+    search?: string;
+    sortBy?: "newest" | "oldest" | "rating" | "sold" | "discount" | "price_asc" | "price_desc";
+    minPrice?: number;
+    maxPrice?: number;
+    isAvailable?: boolean | string;
+    vendorId?: string;
+}
 
+// ====================== CREATE OPERATIONS ======================
 /**
  * Create a new product
  */
@@ -25,67 +42,77 @@ export const createProduct = async (data: {
     discount?: number;
     categoryId: string;
     featured?: boolean;
-    images?: Array<{ url?: string; public_url?: string }>;
-    descriptionImages?: Array<{ url?: string; public_url?: string }>;
-    sizes?: Array<{ size: string; qty: number; price: number }>;
+    images: Array<{ url?: string; public_url?: string } | string>;
+    descriptionImages?: Array<{ url?: string; public_url?: string } | string>;
+    sizes: Array<{ size: string; qty: number; price: number }>;
     subProducts?: Array<any>;
     ingredients?: any;
 }) => {
     try {
-        // Validate required fields
-        if (!data.title || !data.slug || !data.description || !data.sku || !data.categoryId || !data.longDescription || !data.images || !data.descriptionImages || !data.sizes) {
-            throw new ProductError("Missing required fields", apiStatusCode.BadRequest, "MISSING_FIELDS");
-        }
+        // Validation
+       if(!data.title || !data.slug || !data.description || !data.sku || !data.categoryId || !data.vendorId || !data.images || !data.sizes){
+        throw new ProductError("All fields are required", apiStatusCode.BadRequest, "MISSING_FIELD");
+       }
 
-        // Check if category exists and is not deleted
+        // Check if category exists
         const category = await prisma.category.findUnique({
-            where: { id: data.categoryId} as any
+            where: { id: data.categoryId } as any
         });
         if (!category) {
-            throw new ProductError("Category not found or has been deleted", apiStatusCode.NotFound, "CATEGORY_NOT_FOUND");
+            throw new ProductError("Category not found or inactive", apiStatusCode.NotFound, "CATEGORY_NOT_FOUND");
         }
 
         // Validate sizes
-        data.sizes?.forEach(s => {
+        if (!Array.isArray(data.sizes) || data.sizes.length === 0) {
+            throw new ProductError("At least one size is required", apiStatusCode.BadRequest, "INVALID_SIZES");
+        }
+        
+        data.sizes.forEach(s => {
             if (!s.size || s.qty < 0 || s.price <= 0) {
-                throw new ProductError("Invalid size data: size, qty >= 0, and price > 0 are required", apiStatusCode.BadRequest, "INVALID_SIZE_DATA");
+                throw new ProductError("Invalid size data: price must be > 0 and qty >= 0", apiStatusCode.BadRequest);
             }
         });
 
-        // Check for duplicate slug or SKU (ignoring deleted products)
+        // Slug and SKU uniqueness
+        const slug = data.slug.toLowerCase().trim();
+        const sku = data.sku.toUpperCase().trim();
+
         const existing = await prisma.product.findFirst({
             where: {
-                OR: [
-                    { slug: data.slug.toLowerCase() },
-                    { sku: data.sku.toUpperCase() }
-                ]
+                OR: [{ slug }, { sku }]
             }
         });
+
         if (existing) {
-            throw new ProductError("Product slug or SKU already exists", apiStatusCode.Conflict, "DUPLICATE_PRODUCT");
+            const conflict = existing.slug === slug ? "slug" : "SKU";
+            throw new ProductError(`Product ${conflict} already exists`, apiStatusCode.Conflict, "DUPLICATE_PRODUCT");
         }
+
+        // Process images
+        const processImages = (imgs: any[]) => imgs?.map(img => 
+            typeof img === 'string' ? img : (img?.url || img?.public_url)
+        ).filter(Boolean) as string[] || [];
 
         const product = await prisma.product.create({
             data: {
                 title: data.title.trim(),
-                slug: data.slug.toLowerCase().trim(),
+                slug,
                 description: data.description.trim(),
                 longDescription: data.longDescription.trim(),
-                vendorId: data.vendorId?.trim(),
-                sku: data.sku.toUpperCase().trim(),
+                vendorId: data.vendorId,
+                sku,
                 categoryId: data.categoryId,
                 featured: data.featured || false,
                 discount: data.discount || 0,
-                images: data.images?.map(img => img.url || img.public_url).filter(Boolean) as string[] || [],
-                descriptionImages: data.descriptionImages?.map(img => img.url || img.public_url).filter(Boolean) as string[] || [],
-                sizes: data.sizes || [],
+                images: processImages(data.images),
+                descriptionImages: processImages(data.descriptionImages || []),
+                sizes: data.sizes,
                 subProducts: data.subProducts || [],
                 ingredients: data.ingredients || {},
             },
             include: {
-                category: {
-                    select: { id: true, name: true, slug: true }
-                }
+                category: { select: { id: true, name: true, slug: true } },
+                vendor: { select: { id: true, name: true } }
             }
         });
 
@@ -93,67 +120,65 @@ export const createProduct = async (data: {
             message: "Product created successfully",
             data: product,
             statusCode: apiStatusCode.Created
-        }
+        };
     } catch (error: any) {
         if (error instanceof ProductError) throw error;
         console.error("Create product error:", error);
-        throw new ProductError(error?.message || "Failed to create product", apiStatusCode.InternalServerError);
+        throw new ProductError(error?.message || "Internal server error during product creation");
     }
 };
 
-// ==================== READ OPERATIONS ====================
-
+// ====================== READ OPERATIONS ======================
 /**
- * Get all products with filtering and pagination
+ * Get all products with advanced filtering and pagination
  */
-export const getAllProducts = async (options: {
-    page?: number;
-    limit?: number;
-    categoryId?: string;
-    featured?: boolean;
-    search?: string;
-    sortBy?: "newest" | "oldest" | "rating" | "sold" | "discount";
-} = {}) => {
+export const getAllProducts = async (options: ProductFilterOptions = {}) => {
     try {
-        const page = Math.max(1, options.page || 1);
-        const limit = Math.min(100, Math.max(1, options.limit || 10));
+        const page = Math.max(1, Number(options.page) || 1);
+        const limit = Math.min(100, Math.max(1, Number(options.limit) || 10));
         const skip = (page - 1) * limit;
 
-        // Build where clause
         const where: Prisma.ProductWhereInput = {
-            deletedAt: null,
-            ...(options.featured !== undefined && { featured: options.featured }),
             ...(options.categoryId && { categoryId: options.categoryId }),
+            ...(options.vendorId && { vendorId: options.vendorId }),
+            ...(options.featured !== undefined && { 
+                featured: options.featured === "true" || options.featured === true 
+            }),
+            ...(options.isAvailable !== undefined && { 
+                productIsAvailable: options.isAvailable === "true" || options.isAvailable === true 
+            }),
             ...(options.search && {
                 OR: [
                     { title: { contains: options.search, mode: "insensitive" } },
                     { description: { contains: options.search, mode: "insensitive" } },
-                    { vendorId: { contains: options.search, mode: "insensitive" } },
+                    { sku: { contains: options.search, mode: "insensitive" } },
                 ]
             })
         };
 
-        // Build order by
-        let orderBy: Prisma.ProductOrderByWithRelationInput = { createdAt: "desc" };
-        switch (options.sortBy) {
-            case "oldest":
-                orderBy = { createdAt: "asc" };
-                break;
-            case "rating":
-                orderBy = { rating: "desc" };
-                break;
-            case "sold":
-                orderBy = { sold: "desc" };
-                break;
-            case "discount":
-                orderBy = { discount: "desc" };
-                break;
-            case "newest":
-            default:
-                orderBy = { createdAt: "desc" };
+        if (options.minPrice || options.maxPrice) {
+            where.sizes = {
+                some: {
+                    price: {
+                        ...(options.minPrice && { gte: Number(options.minPrice) }),
+                        ...(options.maxPrice && { lte: Number(options.maxPrice) }),
+                    }
+                }
+            };
         }
 
-        // Fetch products and total count
+        let orderBy: Prisma.ProductOrderByWithRelationInput = { createdAt: "desc" };
+
+        switch (options.sortBy) {
+            case "oldest": orderBy = { createdAt: "asc" }; break;
+            case "rating": orderBy = { rating: "desc" }; break;
+            case "sold": orderBy = { sold: "desc" }; break;
+            case "discount": orderBy = { discount: "desc" }; break;
+            case "price_asc": orderBy = { sizes: { _count: "asc" } as any }; break;
+            case "price_desc": orderBy = { sizes: { _count: "desc" } as any }; break;
+            case "newest": default: orderBy = { createdAt: "desc" };
+        }
+
         const [products, total] = await Promise.all([
             prisma.product.findMany({
                 where,
@@ -161,19 +186,20 @@ export const getAllProducts = async (options: {
                 skip,
                 take: limit,
                 include: {
-                    category: {
-                        select: { id: true, name: true, slug: true }
-                    },
-                    productReviews: {
-                        select: { id: true, rating: true }
-                    }
+                    category: { select: { id: true, name: true, slug: true } },
+                    vendor: { select: { id: true, name: true } },
+                    _count: { select: { productReviews: { where: { isApproved: true } } } }
                 }
             }),
             prisma.product.count({ where })
         ]);
-
+        if(!products){
+            throw new ProductError("Products not found", apiStatusCode.NotFound, "NOT_FOUND");
+        }
         return {
             data: products,
+            message: "Products fetched successfully",
+            statusCode: apiStatusCode.Success,
             pagination: {
                 total,
                 page,
@@ -185,86 +211,7 @@ export const getAllProducts = async (options: {
         };
     } catch (error: any) {
         console.error("Get all products error:", error);
-        throw new ProductError(error?.message || "Failed to fetch products", apiStatusCode.InternalServerError);
-    }
-};
-
-/**
- * Get single product by ID
- */
-export const getProductById = async (id: string) => {
-    try {
-        if (!id) {
-            throw new ProductError("Product ID is required", apiStatusCode.BadRequest, "MISSING_ID");
-        }
-
-        const product = await prisma.product.findFirst({
-            where: { id, deletedAt: null },
-            include: {
-                category: {
-                    select: { id: true, name: true, slug: true }
-                },
-                productReviews: {
-                    where: { deletedAt: null },
-                    include: {
-                        user: {
-                            select: { id: true, username: true, email: true }
-                        }
-                    },
-                    orderBy: { createdAt: "desc" }
-                }
-            }
-        });
-
-        if (!product) {
-            throw new ProductError("Product not found", apiStatusCode.NotFound, "PRODUCT_NOT_FOUND");
-        }
-
-        return product;
-    } catch (error: any) {
-        if (error instanceof ProductError) throw error;
-        console.error("Get product by ID error:", error);
-        throw new ProductError(error?.message || "Failed to fetch product", apiStatusCode.InternalServerError);
-    }
-};
-
-/**
- * Get product by slug
- */
-export const getProductBySlug = async (slug: string) => {
-    try {
-        if (!slug) {
-            throw new ProductError("Product slug is required", apiStatusCode.BadRequest, "MISSING_SLUG");
-        }
-
-        const product = await prisma.product.findFirst({
-            where: { slug: slug.toLowerCase(), deletedAt: null },
-            include: {
-                category: {
-                    select: { id: true, name: true, slug: true }
-                },
-                productReviews: {
-                    where: { deletedAt: null },
-                    include: {
-                        user: {
-                            select: { id: true, username: true }
-                        }
-                    },
-                    orderBy: { createdAt: "desc" }
-                }
-            }
-        });
-
-        if (!product) {
-            throw new ProductError("Product not found", apiStatusCode.NotFound, "PRODUCT_NOT_FOUND");
-        }
-
-        return product;
-        
-    } catch (error: any) {
-        if (error instanceof ProductError) throw error;
-        console.error("Get product by slug error:", error);
-        throw new ProductError(error?.message || "Failed to fetch product", apiStatusCode.InternalServerError);
+        throw new ProductError(error?.message || "Failed to fetch products");
     }
 };
 
@@ -273,21 +220,17 @@ export const getProductBySlug = async (slug: string) => {
  */
 export const getFeaturedProducts = async (limit: number = 6) => {
     try {
-        const products = await prisma.product.findMany({
-            where: { featured: true, deletedAt: null },
+        return await prisma.product.findMany({
+            where: { featured: true },
             orderBy: { createdAt: "desc" },
             take: limit,
             include: {
-                category: {
-                    select: { id: true, name: true, slug: true }
-                }
+                category: { select: { id: true, name: true, slug: true } },
+                vendor: { select: { id: true, name: true } }
             }
         });
-
-        return products;
     } catch (error: any) {
-        console.error("Get featured products error:", error);
-        throw new ProductError(error?.message || "Failed to fetch featured products", apiStatusCode.InternalServerError);
+        throw new ProductError(error?.message || "Failed to fetch featured products");
     }
 };
 
@@ -297,41 +240,77 @@ export const getFeaturedProducts = async (limit: number = 6) => {
 export const searchProducts = async (query: string, limit: number = 20) => {
     try {
         if (!query || query.trim().length < 2) {
-            throw new ProductError("Search query must be at least 2 characters", apiStatusCode.BadRequest, "INVALID_SEARCH");
+            throw new ProductError("Search query must be at least 2 characters", apiStatusCode.BadRequest);
         }
 
-        const products = await prisma.product.findMany({
+        return await prisma.product.findMany({
             where: {
-                deletedAt: null,
                 OR: [
                     { title: { contains: query, mode: "insensitive" } },
-                    { description: { contains: query, mode: "insensitive" } },
-                    { vendorId: { contains: query, mode: "insensitive" } },
                     { sku: { contains: query, mode: "insensitive" } },
+                    { description: { contains: query, mode: "insensitive" } }
                 ]
             },
             take: limit,
-            select: {
-                id: true,
-                title: true,
-                slug: true,
-                vendorId: true,
-                sku: true,
-                images: true,
-                rating: true
+            include: {
+                category: { select: { id: true, name: true } },
+                vendor: { select: { id: true, name: true } }
             }
         });
-
-        return products;
     } catch (error: any) {
         if (error instanceof ProductError) throw error;
-        console.error("Search products error:", error);
-        throw new ProductError(error?.message || "Failed to search products", apiStatusCode.InternalServerError);
+        throw new ProductError(error?.message || "Failed to search products");
     }
 };
 
-// ==================== UPDATE OPERATIONS ====================
+/**
+ * Get single product by ID
+ */
+export const getProductById = async (id: string) => {
+    if (!id) throw new ProductError("Product ID is required", apiStatusCode.BadRequest);
 
+    const product = await prisma.product.findFirst({
+        where: { id },
+        include: {
+            category: { select: { id: true, name: true, slug: true } },
+            vendor: { select: { id: true, name: true } },
+            productReviews: {
+                where: { isApproved: true },
+                include: { user: { select: { id: true, username: true, email: true } } },
+                orderBy: { createdAt: "desc" },
+                take: 10
+            }
+        }
+    });
+
+    if (!product) throw new ProductError("Product not found", apiStatusCode.NotFound);
+    return product;
+};
+
+/**
+ * Get product by slug
+ */
+export const getProductBySlug = async (slug: string) => {
+    if (!slug) throw new ProductError("Product slug is required", apiStatusCode.BadRequest);
+
+    const product = await prisma.product.findFirst({
+        where: { slug: slug.toLowerCase() },
+        include: {
+            category: { select: { id: true, name: true, slug: true } },
+            vendor: { select: { id: true, name: true } },
+            productReviews: {
+                where: { isApproved: true },
+                include: { user: { select: { id: true, username: true } } },
+                orderBy: { createdAt: "desc" }
+            }
+        }
+    });
+
+    if (!product) throw new ProductError("Product not found", apiStatusCode.NotFound);
+    return product;
+};
+
+// ====================== UPDATE OPERATIONS ======================
 /**
  * Update product
  */
@@ -343,454 +322,194 @@ export const updateProduct = async (id: string, data: Partial<{
     vendorId: string;
     discount: number;
     featured: boolean;
+    productIsAvailable: boolean;
     categoryId: string;
-    images: Array<{ url?: string; public_url?: string }>;
-    descriptionImages: Array<{ url?: string; public_url?: string }>;
-    sizes: Array<{ size: string; qty: number; price: number }>;
-    subProducts: Array<any>;
+    images: any[];
+    descriptionImages: any[];
+    sizes: any[];
+    subProducts: any[];
     ingredients: any;
 }>) => {
     try {
-        if (!id) {
-            throw new ProductError("Product ID is required", apiStatusCode.BadRequest, "MISSING_ID");
-        }
+        if (!id) throw new ProductError("Product ID is required", apiStatusCode.BadRequest);
 
-        // Check product exists
-        const product = await prisma.product.findUnique({
-            where: { id }
-        });
-        if (!product) {
-            throw new ProductError("Product not found", apiStatusCode.NotFound, "PRODUCT_NOT_FOUND");
-        }
-
-        // Check category if provided (and not deleted)
-        if (data.categoryId) {
-            const category = await prisma.category.findUnique({
-                where: { id: data.categoryId, deletedAt: null } as any
-            });
-            if (!category) {
-                throw new ProductError("Category not found or has been deleted", apiStatusCode.NotFound, "CATEGORY_NOT_FOUND");
-            }
-        }
-
-        // Check for duplicate slug if provided
-        if (data.slug && data.slug !== product.slug) {
-            const existing = await prisma.product.findFirst({
-                where: {
-                    slug: data.slug.toLowerCase(),
-                    NOT: { id }
-                }
-            });
-            if (existing) {
-                throw new ProductError("Product slug already exists", apiStatusCode.Conflict, "DUPLICATE_SLUG");
-            }
-        }
+        const product = await prisma.product.findFirst({ where: { id } });
+        if (!product) throw new ProductError("Product not found", apiStatusCode.NotFound);
 
         const updateData: any = {};
+
         if (data.title) updateData.title = data.title.trim();
-        if (data.slug) updateData.slug = data.slug.toLowerCase().trim();
+        if (data.slug) {
+            const slug = data.slug.toLowerCase().trim();
+            if (slug !== product.slug) {
+                const existing = await prisma.product.findFirst({ where: { slug, id: { not: id } } });
+                if (existing) throw new ProductError("Slug already in use", apiStatusCode.Conflict);
+                updateData.slug = slug;
+            }
+        }
+        
         if (data.description) updateData.description = data.description.trim();
         if (data.longDescription) updateData.longDescription = data.longDescription.trim();
-        if (data.vendorId !== undefined) updateData.vendorId = data.vendorId;
         if (data.discount !== undefined) updateData.discount = Math.max(0, Math.min(100, data.discount));
         if (data.featured !== undefined) updateData.featured = data.featured;
-        if (data.categoryId) updateData.categoryId = data.categoryId;
-        if (data.images) updateData.images = data.images.map(img => img.url || img.public_url).filter(Boolean);
-        if (data.descriptionImages) updateData.descriptionImages = data.descriptionImages.map(img => img.url || img.public_url).filter(Boolean);
+        if (data.productIsAvailable !== undefined) updateData.productIsAvailable = data.productIsAvailable;
+        if (data.vendorId) updateData.vendorId = data.vendorId;
+        
+        if (data.categoryId) {
+            const cat = await prisma.category.findUnique({ where: { id: data.categoryId } as any });
+            if (!cat) throw new ProductError("Category not found", apiStatusCode.NotFound);
+            updateData.categoryId = data.categoryId;
+        }
+
+        const processImages = (imgs: any[]) => imgs?.map(img => 
+            typeof img === 'string' ? img : (img?.url || img?.public_url)
+        ).filter(Boolean);
+
+        if (data.images) updateData.images = processImages(data.images);
+        if (data.descriptionImages) updateData.descriptionImages = processImages(data.descriptionImages);
+        
         if (data.sizes) {
             data.sizes.forEach(s => {
-                if (!s.size || s.qty < 0 || s.price <= 0) {
-                    throw new ProductError("Invalid size data", apiStatusCode.BadRequest);
-                }
+                if (!s.size || s.qty < 0 || s.price <= 0) throw new ProductError("Invalid size data", apiStatusCode.BadRequest);
             });
             updateData.sizes = data.sizes;
         }
-        if (data.subProducts) updateData.subProducts = data.subProducts;
-        if (data.ingredients !== undefined) updateData.ingredients = data.ingredients ?? {};
 
-        const updated = await prisma.product.update({
+        if (data.subProducts) updateData.subProducts = data.subProducts;
+        if (data.ingredients !== undefined) updateData.ingredients = data.ingredients;
+
+        return await prisma.product.update({
             where: { id },
             data: updateData,
-            include: {
-                category: {
-                    select: { id: true, name: true, slug: true }
-                }
-            }
+            include: { category: { select: { id: true, name: true } } }
         });
-
-        return updated;
     } catch (error: any) {
         if (error instanceof ProductError) throw error;
         console.error("Update product error:", error);
-        throw new ProductError(error?.message || "Failed to update product", apiStatusCode.InternalServerError);
+        throw new ProductError(error?.message || "Failed to update product");
     }
 };
 
-// ==================== DELETE OPERATIONS ====================
-
+// ====================== DELETE OPERATIONS ======================
 /**
- * Soft delete product (mark as deleted)
+ * Soft delete product
  */
 export const deleteProduct = async (id: string) => {
     try {
-        if (!id) {
-            throw new ProductError("Product ID is required", apiStatusCode.BadRequest, "MISSING_ID");
-        }
+        const product = await prisma.product.findFirst({ where: { id } });
+        if (!product) throw new ProductError("Product not found", apiStatusCode.NotFound);
 
-        const product = await prisma.product.findUnique({
+        await prisma.product.delete({
             where: { id }
         });
-        if (!product) {
-            throw new ProductError("Product not found", apiStatusCode.NotFound, "PRODUCT_NOT_FOUND");
-        }
 
-        const deleted = await prisma.product.update({
-            where: { id },
-            data: { deletedAt: new Date() }
-        });
-
-        return { message: "Product deleted successfully", product: deleted };
+        return { success: true, message: "Product deleted successfully" };
     } catch (error: any) {
-        if (error instanceof ProductError) throw error;
-        console.error("Delete product error:", error);
-        throw new ProductError(error?.message || "Failed to delete product", apiStatusCode.InternalServerError);
+        throw new ProductError(error?.message || "Failed to delete product");
     }
 };
 
-/**
- * Permanently delete product (hard delete - use with caution)
- */
-export const permanentlyDeleteProduct = async (id: string) => {
-    try {
-        if (!id) {
-            throw new ProductError("Product ID is required", apiStatusCode.BadRequest, "MISSING_ID");
-        }
-
-        // Delete related records first
-        await prisma.$transaction([
-            prisma.cartItem.deleteMany({ where: { productId: id } }),
-            prisma.orderItem.deleteMany({ where: { productId: id } }),
-            prisma.productReview.deleteMany({ where: { productId: id } }),
-            prisma.product.delete({ where: { id } })
-        ]);
-
-        return { message: "Product permanently deleted successfully" };
-    } catch (error: any) {
-        if (error?.code === 'P2025') {
-            throw new ProductError("Product not found", apiStatusCode.NotFound, "PRODUCT_NOT_FOUND");
-        }
-        console.error("Permanently delete product error:", error);
-        throw new ProductError(error?.message || "Failed to delete product", apiStatusCode.InternalServerError);
-    }
-};
-
-// ==================== REVIEW OPERATIONS ====================
-
-/**
- * Add review to product
- */
+// ====================== REVIEW OPERATIONS ======================
 export const addProductReview = async (productId: string, userId: string, data: {
     rating: number;
     comment: string;
 }) => {
     try {
-        if (!productId || !userId) {
-            throw new ProductError("Product ID and User ID are required", apiStatusCode.BadRequest, "MISSING_IDS");
-        }
-
-        if (!data.rating || data.rating < 1 || data.rating > 5) {
-            throw new ProductError("Rating must be between 1 and 5", apiStatusCode.BadRequest, "INVALID_RATING");
-        }
-
-        if (!data.comment || data.comment.trim().length < 5) {
-            throw new ProductError("Comment must be at least 5 characters", apiStatusCode.BadRequest, "INVALID_COMMENT");
-        }
-
-        // Check product and user exist
+        if (!productId || !userId) throw new ProductError("Missing IDs", apiStatusCode.BadRequest);
+        
         const [product, user] = await Promise.all([
-            prisma.product.findUnique({ where: { id: productId } }),
-            prisma.user.findUnique({ where: { id: userId } })
+            prisma.product.findFirst({ where: { id: productId } }),
+            prisma.user.findFirst({ where: { id: userId } })
         ]);
 
-        if (!product) {
-            throw new ProductError("Product not found", apiStatusCode.NotFound, "PRODUCT_NOT_FOUND");
-        }
-        if (!user) {
-            throw new ProductError("User not found", apiStatusCode.NotFound, "USER_NOT_FOUND");
-        }
-        if (user.isBlocked) {
-            throw new ProductError("Your account has been blocked", apiStatusCode.NotMatched, "USER_BLOCKED");
-        }
+        if (!product) throw new ProductError("Product not found", apiStatusCode.NotFound);
+        if (!user) throw new ProductError("User not found", apiStatusCode.NotFound);
+        if (user.isBlocked) throw new ProductError("User blocked", apiStatusCode.Locked);
 
-        // Check if user already reviewed this product
-        const existingReview = await prisma.productReview.findFirst({
-            where: { productId, userId, deletedAt: null }
-        });
-
-        if (existingReview) {
-            throw new ProductError("You have already reviewed this product", apiStatusCode.Conflict, "DUPLICATE_REVIEW");
-        }
+        const existing = await prisma.productReview.findFirst({ where: { productId, userId } });
+        if (existing) throw new ProductError("Already reviewed", apiStatusCode.Conflict);
 
         const review = await prisma.productReview.create({
             data: {
-                product: { connect: { id: productId } },
-                user: { connect: { id: userId } },
-                rating: Math.round(data.rating * 2) / 2, // Round to nearest 0.5
-                comment: data.comment.trim()
-            },
-            include: {
-                user: {
-                    select: { id: true, username: true }
-                }
+                productId,
+                userId,
+                rating: data.rating,
+                comment: data.comment.trim(),
+                isApproved: true 
             }
         });
 
-        // Update product rating
         await updateProductRating(productId);
-
         return review;
     } catch (error: any) {
         if (error instanceof ProductError) throw error;
-        console.error("Add review error:", error);
-        throw new ProductError(error?.message || "Failed to add review", apiStatusCode.InternalServerError);
+        throw new ProductError(error?.message || "Failed to add review");
     }
 };
 
-/**
- * Get product reviews
- */
-export const getProductReviews = async (productId: string, options: {
-    page?: number;
-    limit?: number;
-} = {}) => {
-    try {
-        if (!productId) {
-            throw new ProductError("Product ID is required", apiStatusCode.BadRequest, "MISSING_ID");
-        }
-
-        const page = Math.max(1, options.page || 1);
-        const limit = Math.min(50, Math.max(1, options.limit || 10));
-        const skip = (page - 1) * limit;
-
-        const [reviews, total] = await Promise.all([
-            prisma.productReview.findMany({
-                where: { productId, deletedAt: null },
-                orderBy: { createdAt: "desc" },
-                skip,
-                take: limit,
-                include: {
-                    user: {
-                        select: { id: true, username: true }
-                    }
-                }
-            }),
-            prisma.productReview.count({
-                where: { productId, deletedAt: null }
-            })
-        ]);
-
-        return {
-            data: reviews,
-            pagination: {
-                total,
-                page,
-                limit,
-                pages: Math.ceil(total / limit)
-            }
-        };
-    } catch (error: any) {
-        if (error instanceof ProductError) throw error;
-        console.error("Get reviews error:", error);
-        throw new ProductError(error?.message || "Failed to fetch reviews", apiStatusCode.InternalServerError);
-    }
-};
-
-/**
- * Delete review
- */
-export const deleteProductReview = async (reviewId: string, userId: string) => {
-    try {
-        if (!reviewId || !userId) {
-            throw new ProductError("Review ID and User ID are required", apiStatusCode.BadRequest, "MISSING_IDS");
-        }
-
-        const review = await prisma.productReview.findUnique({
-            where: { id: reviewId }
-        });
-
-        if (!review) {
-            throw new ProductError("Review not found", apiStatusCode.NotFound, "REVIEW_NOT_FOUND");
-        }
-
-        // Check if user is the review author
-        if (review.userId !== userId) {
-            throw new ProductError("You can only delete your own reviews", apiStatusCode.NotMatched, "FORBIDDEN");
-        }
-
-        await prisma.productReview.update({
-            where: { id: reviewId },
-            data: { deletedAt: new Date() }
-        });
-
-        // Update product rating
-        await updateProductRating(review.productId);
-
-        return { message: "Review deleted successfully" };
-    } catch (error: any) {
-        if (error instanceof ProductError) throw error;
-        console.error("Delete review error:", error);
-        throw new ProductError(error?.message || "Failed to delete review", apiStatusCode.InternalServerError);
-    }
-};
-
-// ==================== HELPER FUNCTIONS ====================
-
-/**
- * Update product rating based on reviews
- */
+// ====================== HELPERS ======================
 const updateProductRating = async (productId: string) => {
-    try {
-        const reviews = await prisma.productReview.findMany({
-            where: { productId, deletedAt: null },
-            select: { rating: true }
-        });
+    const reviews = await prisma.productReview.findMany({
+        where: { productId, isApproved: true },
+        select: { rating: true }
+    });
 
-        if (reviews.length === 0) {
-            await prisma.product.update({
-                where: { id: productId },
-                data: { rating: 0, numReviews: 0 }
-            });
-            return;
-        }
+    const numReviews = reviews.length;
+    const rating = numReviews > 0 
+        ? Math.round((reviews.reduce((acc, r) => acc + r.rating, 0) / numReviews) * 10) / 10 
+        : 0;
 
-        const avgRating = reviews.reduce((sum, r) => sum + r.rating, 0) / reviews.length;
-
-        await prisma.product.update({
-            where: { id: productId },
-            data: {
-                rating: Math.round(avgRating * 2) / 2,
-                numReviews: reviews.length
-            }
-        });
-    } catch (error) {
-        console.error(`Update product rating error:${apiStatusCode.InternalServerError}`,error);
-    }
+    await prisma.product.update({
+        where: { id: productId },
+        data: { rating, numReviews }
+    });
 };
 
-/**
- * Update product sold count
- */
 export const updateProductSoldCount = async (productId: string, quantity: number) => {
-    try {
-        await prisma.product.update({
-            where: { id: productId },
-            data: {
-                sold: {
-                    increment: quantity
-                }
-            }
-        });
-    } catch (error) {
-       console.error(`Update product rating error:${apiStatusCode.InternalServerError}`,error);
-    }
+    await prisma.product.update({
+        where: { id: productId },
+        data: { sold: { increment: quantity } }
+    });
 };
 
 /**
- * Get products by category
+ * Get products by category with pagination
  */
-export const getProductsByCategory = async (categoryId: string, options: {
-    page?: number;
-    limit?: number;
-} = {}) => {
-    try {
-        if (!categoryId) {
-            throw new ProductError("Category ID is required", apiStatusCode.BadRequest, "MISSING_ID");
-        }
-
-        const page = Math.max(1, options.page || 1);
-        const limit = Math.min(100, Math.max(1, options.limit || 10));
-        const skip = (page - 1) * limit;
-
-        const [products, total] = await Promise.all([
-            prisma.product.findMany({
-                where: { categoryId, deletedAt: null },
-                orderBy: { createdAt: "desc" },
-                skip,
-                take: limit,
-                include: {
-                    category: {
-                        select: { id: true, name: true, slug: true }
-                    }
-                }
-            }),
-            prisma.product.count({
-                where: { categoryId, deletedAt: null }
-            })
-        ]);
-
-        return {
-            data: products,
-            pagination: {
-                total,
-                page,
-                limit,
-                pages: Math.ceil(total / limit)
-            }
-        };
-    } catch (error: any) {
-        if (error instanceof ProductError) throw error;
-        console.error("Get products by category error:", error);
-        throw new ProductError(error?.message || "Failed to fetch products", apiStatusCode.InternalServerError);
-    }
+export const getProductsByCategory = async (categoryId: string, options: ProductFilterOptions = {}) => {
+    return getAllProducts({ ...options, categoryId });
 };
 
 /**
  * Get product statistics
  */
 export const getProductStatistics = async () => {
-    try {
-        const [
-            totalProducts,
-            totalFeatured,
-            totalSold,
-            averageRating,
-            highestRated,
-            bestSellers
-        ] = await Promise.all([
-            prisma.product.count({ where: { deletedAt: null } }),
-            prisma.product.count({ where: { featured: true, deletedAt: null } }),
-            prisma.product.aggregate({
-                where: { deletedAt: null },
-                _sum: { sold: true }
-            }),
-            prisma.product.aggregate({
-                where: { deletedAt: null },
-                _avg: { rating: true }
-            }),
-            prisma.product.findMany({
-                where: { deletedAt: null },
-                orderBy: { rating: "desc" },
-                take: 5,
-                select: { id: true, title: true, rating: true }
-            }),
-            prisma.product.findMany({
-                where: { deletedAt: null },
-                orderBy: { sold: "desc" },
-                take: 5,
-                select: { id: true, title: true, sold: true }
-            })
-        ]);
+    const [total, featured, outOfStock, reviews] = await Promise.all([
+        prisma.product.count(),
+        prisma.product.count({ where: { featured: true } }),
+        prisma.product.count({ where: { productIsAvailable: false } }),
+        prisma.productReview.count()
+    ]);
 
-        return {
-            totalProducts,
-            totalFeatured,
-            totalSold: totalSold._sum.sold || 0,
-            averageRating: Math.round((averageRating._avg.rating || 0) * 2) / 2,
-            highestRated,
-            bestSellers
-        };
-    } catch (error: any) {
-        console.error("Get statistics error:", error);
-        throw new ProductError(error?.message || "Failed to fetch statistics", apiStatusCode.InternalServerError);
-    }
+    return {
+        totalProducts: total,
+        featuredProducts: featured,
+        outOfStockProducts: outOfStock,
+        totalReviews: reviews
+    };
+};
+
+// ====================== EXPORT ======================
+export default {
+    createProduct,
+    getAllProducts,
+    getFeaturedProducts,
+    searchProducts,
+    getProductById,
+    getProductBySlug,
+    updateProduct,
+    deleteProduct,
+    addProductReview,
+    updateProductSoldCount,
+    getProductsByCategory,
+    getProductStatistics
 };

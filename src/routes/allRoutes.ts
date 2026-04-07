@@ -11,12 +11,12 @@ import topBarNotificationRouter from "./topBarNotification.routes";
 
 const rootRouter: Router = Router();
 
-rootRouter.use("/auth", userRouter );
+rootRouter.use("/auth", userRouter);
 rootRouter.use("/coupons", couponRouter);
 rootRouter.use("/categories", categoryRouter);
 rootRouter.use("/banners", bannerRouter);
 rootRouter.use("/products", productRouter);
-rootRouter.use("/vendors", vendorRouter);
+rootRouter.use("/vendor", vendorRouter);
 rootRouter.use("/reviews", reviewRouter);
 rootRouter.use("/addresses", addressRouter);
 rootRouter.use("/notification-bar", topBarNotificationRouter);

@@ -4,6 +4,7 @@ export const createMainCategorySchema = z.object({
     body: z.object({
         name: z.string().min(2).max(50),
         slug: z.string().min(2).max(50).toLowerCase(),
+        icon: z.string().optional(),
         featured: z.boolean().optional(),
     })
 });
@@ -12,6 +13,7 @@ export const createSubCategorySchema = z.object({
     body: z.object({
         name: z.string().min(2).max(50),
         slug: z.string().min(2).max(50).toLowerCase(),
+        icon: z.string().optional(),
         parentCategoryId: z.string().min(1),
         featured: z.boolean().optional(),
     })
@@ -21,6 +23,7 @@ export const updateCategorySchema = z.object({
     body: z.object({
         name: z.string().min(2).max(50).optional(),
         slug: z.string().min(2).max(50).toLowerCase().optional(),
+        icon: z.string().optional(),
         featured: z.boolean().optional(),
         parentCategoryId: z.string().optional().nullable(),
     })

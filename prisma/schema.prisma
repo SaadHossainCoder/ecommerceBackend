@@ -162,10 +162,11 @@ model Vendor{
 
 model Category {
   id        String   @id @default(auto()) @map("_id") @db.ObjectId
-  name      String   @unique
-  slug      String   @unique
+  name      String
+  slug      String
+  icon      String   @default("📁")
   featured  Boolean  @default(false)
-  deletedAt DateTime? // Soft delete 
+
 
   // Self-referential relationship for nested categories
   parentCategoryId String?  @db.ObjectId
@@ -179,7 +180,6 @@ model Category {
 
   @@map("categories")
   @@index([parentCategoryId])
-  @@index([deletedAt])
 }
 
 
@@ -188,8 +188,6 @@ model ProductReview {
   rating    Float      @default(0)
   comment   String
   isApproved Boolean  @default(false)
-  
-  deletedAt DateTime? // Soft delete
 
   productId String  @db.ObjectId
   product   Product @relation("UserProductReviews",fields: [productId], references: [id], onDelete: NoAction, onUpdate: NoAction)
@@ -204,7 +202,6 @@ model ProductReview {
   @@unique([productId, userId])
   @@index([userId])
   @@index([createdAt(sort: Desc)])
-  @@index([deletedAt])
 }
 
 model CartItem {

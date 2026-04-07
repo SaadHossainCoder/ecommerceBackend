@@ -126,8 +126,7 @@ export const login = async (email: string, password: string) => {
             throw new AuthError("Your account has been blocked. Please contact support.", apiStatusCode.NotMatched, "USER_BLOCKED");
         }
 
-        // access token
-        const accessToken = signAccessToken({ id: user.id, role: user.role });
+       
 
         // create refresh token
         if (!user.id) throw new AuthError("User ID is required", apiStatusCode.InternalServerError);
@@ -154,6 +153,9 @@ export const login = async (email: string, password: string) => {
                 }
             });
         });
+
+         // access token
+        const accessToken = signAccessToken({ id: user.id, users: user.username, role: user.role });
 
         logger.info("User logged in", { userId: user.id });
         return { user, accessToken, refreshToken: refreshPlain };
@@ -262,7 +264,7 @@ export const refreshTokens = async (refreshToken: string) => {
         });
 
 
-        const accessToken = signAccessToken({ id: userId, role: user.role });
+        const accessToken = signAccessToken({ id: userId, users: user.username, role: user.role });
 
         return { refreshToken: newplain, accessToken };
     } catch (error) {
@@ -550,31 +552,21 @@ export const deleteUserById = async (userId: string, adminId: string) => {
 };
 
 // Smart frontend session verification service (Amazon/Flipkart grade sync check)
-export const verifyFrontendSession = (clientProvidedId: string | undefined, accessToken: string | undefined, requiredRole?: "ADMIN") => {
+export const verifyFrontendSession = (accessToken: string | undefined) => {
     // 1. Check if token exists
     if (!accessToken) {
-        return { isAuthorised: false, message: "There is no access token" };
+        return { isAuthorised: false, message: "noAccessToken" };
     }
 
     try {
         // 2. Verify token
-        const payload = verifyAccessToken(accessToken) as { id: string; role: string };
-
-        // 3. Optional client ID match check (prevents state mismatch between frontend local storage and httpOnly cookie)
-        if (clientProvidedId && payload.id !== clientProvidedId) {
-            return { isAuthorised: false, message: "User not authorised" };
-        }
-
-        // 4. Role check for admin
-        if (requiredRole === "ADMIN" && payload.role !== "ADMIN") {
-            return { isAuthorised: false, message: "Admin not authorised" };
-        }
+        const payload = verifyAccessToken(accessToken) as { id: string; users: string; role: string };
 
         // 5. Success - returning exact payload needed for the client
-        return { 
-            isAuthorised: true, 
-            user: { id: payload.id, role: payload.role },
-            message: requiredRole === "ADMIN" ? "Admin access granted" : "User access granted"
+        return {
+            isAuthorised: true,
+            user: { id: payload.id, username: payload.users, role: payload.role },
+            message: "User access granted"
         };
     } catch (error) {
         // Token is invalid, expired, or malformed
