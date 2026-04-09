@@ -141,14 +141,12 @@ export const createSubCategory = async (data: {
  */
 export const getAllCategories = async (options: CategoryFilterOptions = {}) => {
   try {
-    const page = Number(options.page) > 0 ? Number(options.page) : 1;
+    const page = Math.max(1, Number(options.page) || 1);
     const limit = Math.min(100, Number(options.limit) || 10);
     const skip = (page - 1) * limit;
 
-    // ✅ SIMPLE WHERE (NO COMPLEX AND ARRAY)
     const where: Prisma.CategoryWhereInput = {};
 
-    // ✅ OPTIONAL FILTERS
     if (options.featured !== undefined) {
       where.featured = options.featured === "true" || options.featured === true;
     }
@@ -165,14 +163,20 @@ export const getAllCategories = async (options: CategoryFilterOptions = {}) => {
       ];
     }
 
-    // ✅ QUERY (ONLY WHAT YOU NEED)
     const [data, total] = await Promise.all([
       prisma.category.findMany({
         where,
         orderBy: { createdAt: "desc" },
         skip,
         take: limit,
-        include: {
+        select: {
+          id: true,
+          name: true,
+          slug: true,
+          icon: true,
+          featured: true,
+          parentCategoryId: true,
+          createdAt: true,
           _count: {
             select: {
               products: true,
@@ -197,10 +201,7 @@ export const getAllCategories = async (options: CategoryFilterOptions = {}) => {
     };
 
   } catch (error: any) {
-    throw new CategoryError(
-      error.message || "Failed to fetch categories",
-      500
-    );
+    throw new CategoryError(error.message || "Failed to fetch categories");
   }
 };
 /**
@@ -209,7 +210,13 @@ export const getAllCategories = async (options: CategoryFilterOptions = {}) => {
 export const getCategoryTree = async () => {
   try {
     const categories = await prisma.category.findMany({
-      include: {
+      select: {
+        id: true,
+        name: true,
+        slug: true,
+        icon: true,
+        featured: true,
+        parentCategoryId: true,
         _count: {
           select: {
             products: true,
@@ -223,19 +230,18 @@ export const getCategoryTree = async () => {
     const categoryMap = new Map<string, any>();
     const tree: any[] = [];
 
-    // Initialize map and prepare objects
+    // Initialize map
     categories.forEach(cat => {
       categoryMap.set(cat.id, { ...cat, subCategories: [] });
     });
 
-    // Build tree
+    // Build forest (multiple root trees)
     categoryMap.forEach(cat => {
-      if (cat.parentCategoryId) {
+      if (cat.parentCategoryId && cat.parentCategoryId !== cat.id) {
         const parent = categoryMap.get(cat.parentCategoryId);
         if (parent) {
           parent.subCategories.push(cat);
         } else {
-          // If parent is deleted or not found, treat as root or skip
           tree.push(cat);
         }
       } else {
@@ -245,6 +251,7 @@ export const getCategoryTree = async () => {
 
     return tree;
   } catch (error: any) {
+    console.error("Tree building error:", error.message);
     throw new CategoryError(error.message || "Failed to build category tree");
   }
 };
@@ -410,10 +417,11 @@ export default {
   createMainCategory,
   createSubCategory,
   getAllCategories,
+  getCategoryTree,
   getCategoryById,
   getCategoryBySlug,
-  getCategoryTree,
   updateCategory,
   hardDeleteCategory,
   getCategoryStatistics
 };
+

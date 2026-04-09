@@ -7,7 +7,7 @@ import { authGuard } from "../middleware/auth.guard";
 const productRouter = Router();
 
 // ====================== PUBLIC ROUTES ======================
-productRouter.get("/", validateZod(productZod.productQuerySchema), productController.getAllProducts);
+productRouter.get("/", productController.getAllProducts);
 productRouter.get("/featured", productController.getFeaturedProducts);
 productRouter.get("/search", productController.searchProducts);
 productRouter.get("/slug/:slug", productController.getProductBySlug);

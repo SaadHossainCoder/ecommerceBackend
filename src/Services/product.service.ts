@@ -47,6 +47,9 @@ export const createProduct = async (data: {
     sizes: Array<{ size: string; qty: number; price: number }>;
     subProducts?: Array<any>;
     ingredients?: any;
+    benefits?: string[];
+    brand?: string;
+    subcategory?: string;
 }) => {
     try {
         // Validation
@@ -108,7 +111,12 @@ export const createProduct = async (data: {
                 descriptionImages: processImages(data.descriptionImages || []),
                 sizes: data.sizes,
                 subProducts: data.subProducts || [],
-                ingredients: data.ingredients || {},
+                ingredients: {
+                    details: data.ingredients || {},
+                    benefits: data.benefits || [],
+                    brand: data.brand || "",
+                    subcategory: data.subcategory || ""
+                },
             },
             include: {
                 category: { select: { id: true, name: true, slug: true } },
@@ -329,6 +337,9 @@ export const updateProduct = async (id: string, data: Partial<{
     sizes: any[];
     subProducts: any[];
     ingredients: any;
+    benefits: string[];
+    brand: string;
+    subcategory: string;
 }>) => {
     try {
         if (!id) throw new ProductError("Product ID is required", apiStatusCode.BadRequest);
@@ -336,47 +347,51 @@ export const updateProduct = async (id: string, data: Partial<{
         const product = await prisma.product.findFirst({ where: { id } });
         if (!product) throw new ProductError("Product not found", apiStatusCode.NotFound);
 
-        const updateData: any = {};
-
-        if (data.title) updateData.title = data.title.trim();
-        if (data.slug) {
-            const slug = data.slug.toLowerCase().trim();
-            if (slug !== product.slug) {
-                const existing = await prisma.product.findFirst({ where: { slug, id: { not: id } } });
-                if (existing) throw new ProductError("Slug already in use", apiStatusCode.Conflict);
-                updateData.slug = slug;
-            }
-        }
-        
-        if (data.description) updateData.description = data.description.trim();
-        if (data.longDescription) updateData.longDescription = data.longDescription.trim();
-        if (data.discount !== undefined) updateData.discount = Math.max(0, Math.min(100, data.discount));
-        if (data.featured !== undefined) updateData.featured = data.featured;
-        if (data.productIsAvailable !== undefined) updateData.productIsAvailable = data.productIsAvailable;
-        if (data.vendorId) updateData.vendorId = data.vendorId;
-        
-        if (data.categoryId) {
-            const cat = await prisma.category.findUnique({ where: { id: data.categoryId } as any });
-            if (!cat) throw new ProductError("Category not found", apiStatusCode.NotFound);
-            updateData.categoryId = data.categoryId;
-        }
-
         const processImages = (imgs: any[]) => imgs?.map(img => 
             typeof img === 'string' ? img : (img?.url || img?.public_url)
         ).filter(Boolean);
 
-        if (data.images) updateData.images = processImages(data.images);
-        if (data.descriptionImages) updateData.descriptionImages = processImages(data.descriptionImages);
+        const updateData: any = {
+            ...(data.title && { title: data.title.trim() }),
+            ...(data.slug && { slug: data.slug.toLowerCase().trim() }),
+            ...(data.description && { description: data.description.trim() }),
+            ...(data.longDescription && { longDescription: data.longDescription.trim() }),
+            ...(data.vendorId && { vendorId: data.vendorId }),
+            ...(data.categoryId && { categoryId: data.categoryId }),
+            ...(data.featured !== undefined && { featured: data.featured }),
+            ...(data.productIsAvailable !== undefined && { productIsAvailable: data.productIsAvailable }),
+            ...(data.discount !== undefined && { discount: Math.max(0, Math.min(100, data.discount)) }),
+            ...(data.images && { images: processImages(data.images) }),
+            ...(data.descriptionImages && { images: processImages(data.descriptionImages) }),
+            ...(data.subProducts && { subProducts: data.subProducts }),
+            ...(data.sizes && { sizes: data.sizes }),
+            ...((data.ingredients || data.benefits || data.brand || data.subcategory) && {
+                ingredients: {
+                    ...(typeof product.ingredients === 'object' ? (product.ingredients as any) : {}),
+                    ...(data.ingredients && { details: data.ingredients }),
+                    ...(data.benefits && { benefits: data.benefits }),
+                    ...(data.brand && { brand: data.brand }),
+                    ...(data.subcategory && { subcategory: data.subcategory }),
+                }
+            })
+        };
+
+        // Standard validation checks
+        if (data.slug && data.slug.toLowerCase().trim() !== product.slug) {
+            const existing = await prisma.product.findFirst({ where: { slug: data.slug.toLowerCase().trim(), id: { not: id } } });
+            if (existing) throw new ProductError("Slug already in use", apiStatusCode.Conflict);
+        }
         
+        if (data.categoryId) {
+            const cat = await prisma.category.findUnique({ where: { id: data.categoryId } as any });
+            if (!cat) throw new ProductError("Category not found", apiStatusCode.NotFound);
+        }
+
         if (data.sizes) {
             data.sizes.forEach(s => {
                 if (!s.size || s.qty < 0 || s.price <= 0) throw new ProductError("Invalid size data", apiStatusCode.BadRequest);
             });
-            updateData.sizes = data.sizes;
         }
-
-        if (data.subProducts) updateData.subProducts = data.subProducts;
-        if (data.ingredients !== undefined) updateData.ingredients = data.ingredients;
 
         return await prisma.product.update({
             where: { id },

@@ -29,7 +29,7 @@ export const getAllProducts = async (req: AuthRequest, res: Response) => {
             page: page ? Number(page) : undefined,
             limit: limit ? Number(limit) : undefined,
             categoryId: categoryId as string,
-            featured: featured === "true",
+            featured: featured !== undefined ? featured === "true" : undefined,
             search: search as string,
             sortBy: sortBy as any,
         });
@@ -37,7 +37,7 @@ export const getAllProducts = async (req: AuthRequest, res: Response) => {
         return res.status(apiStatusCode.Success).json({
             ok: true,
             message: "Products fetched successfully",
-            ...result,
+            data: result,
         });
     } catch (error: any) {
         const statusCode = error.statusCode || apiStatusCode.InternalServerError;
