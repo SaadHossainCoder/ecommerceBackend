@@ -19,10 +19,13 @@ userRouter.post("/verify", validateZod(z.verifySchema), userController.verifyEma
 userRouter.post("/otp/send", validateZod(z.otpSendSchema), userController.sendOtp);
 userRouter.post("/otp/verify", validateZod(z.otpVerifySchema), userController.verifyOtp);
 userRouter.get("/me", authGuard(), userController.getMe);
+userRouter.put("/me", authGuard(), validateZod(z.updateUserSchema), userController.updateMe);
 
 // admin routes
 userRouter.get("/users", authGuard(['ADMIN']), userController.getAllUsers);
 userRouter.delete("/user/:id", authGuard(['ADMIN']), userController.deleteUserById);
+userRouter.put("/user/:id", authGuard(['ADMIN']), validateZod(z.updateUserSchema), userController.updateUserById);
+userRouter.post("/user/:id/email", authGuard(['ADMIN']), userController.sendDirectEmail);
 
 // smart guards for frontend routing
 // user guard

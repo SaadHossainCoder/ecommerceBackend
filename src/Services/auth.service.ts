@@ -1,6 +1,6 @@
 import { hashPassword, hashToken, randomTokenHex, verifyPassword } from "../utils/hash.utils"
 import { sendEmail } from "../utils/emailSend.utils"
-import { getForgotPasswordEmail, getOtpEmail, getVerificationEmail, getForgotPasswordOtpEmail } from "../utils/emailTemplates.utils";
+import { getForgotPasswordEmail, getOtpEmail, getVerificationEmail, getForgotPasswordOtpEmail, getAdminDirectEmail } from "../utils/emailTemplates.utils";
 import { signAccessToken, verifyAccessToken } from "../utils/token.utils";
 import { apiStatusCode } from "../lib/apiCode.lib";
 import prisma from "../prisma/client";
@@ -491,6 +491,8 @@ export const getAllUsers = async () => {
                     email: true,
                     role: true,
                     isEmailVerified: true,
+                    isBlocked: true,
+                    lockedUntil: true,
                     createdAt: true,
                     updatedAt: true,
                 }
@@ -514,12 +516,67 @@ export const getUserById = async (userId: string) => {
                 email: true,
                 role: true,
                 isEmailVerified: true,
+                isBlocked: true,
+                lockedUntil: true,
                 createdAt: true,
                 updatedAt: true,
             }
         })
     } catch (error) {
         console.error("Get user by id service error:", error);
+        throw error;
+    }
+};
+
+// update user by id service
+export const updateUserById = async (userId: string, adminId: string, data: any) => {
+    try {
+        if (!userId || !adminId) throw new Error(`Invalid request status code: ${apiStatusCode.NotFound}`);
+
+        const [admin, user] = await Promise.all([
+            prisma.user.findUnique({ where: { id: adminId } }),
+            prisma.user.findUnique({ where: { id: userId } }),
+        ]);
+        if (!admin || admin.role !== "ADMIN") throw new AuthError("Admin required", 403);
+        if (!user) throw new AuthError("User not found", 404);
+
+        // Admin strictly whitelisted payload (NO password)
+        const updatePayload: any = {};
+        if (data.username !== undefined) updatePayload.username = data.username;
+        if (data.email !== undefined) updatePayload.email = data.email;
+        if (data.isBlocked !== undefined) updatePayload.isBlocked = data.isBlocked;
+        if (data.lockedUntil !== undefined) updatePayload.lockedUntil = data.lockedUntil;
+        if (data.role !== undefined) updatePayload.role = data.role;
+
+        return await prisma.user.update({
+            where: { id: userId },
+            data: updatePayload,
+        });
+    } catch (error) {
+        console.error("Update user by id service error:", error);
+        throw error;
+    }
+};
+
+// update me service
+export const updateMe = async (userId: string, data: any) => {
+    try {
+        if (!userId) throw new Error(`Invalid request status code: ${apiStatusCode.NotFound}`);
+
+        const user = await prisma.user.findUnique({ where: { id: userId } });
+        if (!user) throw new AuthError("User not found", 404);
+
+        // User strictly whitelisted payload (ONLY Email and Name, NO password)
+        const updatePayload: any = {};
+        if (data.username !== undefined) updatePayload.username = data.username;
+        if (data.email !== undefined) updatePayload.email = data.email;
+
+        return await prisma.user.update({
+            where: { id: userId },
+            data: updatePayload,
+        });
+    } catch (error) {
+        console.error("Update me service error:", error);
         throw error;
     }
 };
@@ -571,5 +628,28 @@ export const verifyFrontendSession = (accessToken: string | undefined) => {
     } catch (error) {
         // Token is invalid, expired, or malformed
         return { isAuthorised: false, message: "User not authorised sumthing went wrong function" };
+    }
+};
+
+// send direct email to user (Admin action)
+export const sendDirectEmail = async (adminId: string, userId: string, subject: string, message: string) => {
+    try {
+        if (!userId || !adminId) throw new Error(`Invalid request status code: ${apiStatusCode.NotFound}`);
+
+        const [admin, user] = await Promise.all([
+            prisma.user.findUnique({ where: { id: adminId } }),
+            prisma.user.findUnique({ where: { id: userId } }),
+        ]);
+
+        if (!admin || admin.role !== "ADMIN") throw new AuthError("Admin required", 403);
+        if (!user) throw new AuthError("User not found", 404);
+
+        const html = getAdminDirectEmail(user.username, subject, message);
+
+        await sendEmail(user.email, subject, html);
+        return true;
+    } catch (error) {
+        console.error("Admin send email service error:", error);
+        throw error;
     }
 };

@@ -56,3 +56,15 @@ export const otpVerifySchema = z.object({
         otp: z.string().min(3, "OTP is required")
     })
 });
+
+export const updateUserSchema = z.object({
+    body: z.object({
+        username: z.string().min(3, "Username must be at least 3 characters").max(30, "Username must be at most 30 characters").toLowerCase().optional(),
+        email: z.string().email("Invalid email format").toLowerCase().optional(),
+        role: z.enum(["user", "admin", "USER", "ADMIN"]).transform((val) => val.toUpperCase()).optional(),
+        isBlocked: z.boolean().optional(),
+        lockedUntil: z.string().datetime().optional().nullable(),
+    })
+});
+
+export type UpdateUserSchemaType = z.infer<typeof updateUserSchema>;

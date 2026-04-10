@@ -235,6 +235,37 @@ export const getMe = async (req: AuthRequest, res: Response) => {
     }
 };
 
+// update user by id only admin controller
+export const updateUserById = async (req: AuthRequest, res: Response) => {
+    try {
+        const adminId = req.user?.id;
+        const { id: userId } = req.params;
+        const data = req.body;
+        if (!adminId || !userId) {
+            return res.status(apiStatusCode.NotFound).json({ ok: false, message: "Invalid request" });
+        }
+        const updatedUser = await authService.updateUserById(userId, adminId, data);
+        return res.status(apiStatusCode.Success).json({ ok: true, user: updatedUser, message: "User updated successfully" });
+    } catch (error) {
+        return res.status(apiStatusCode.BadRequest).json({ ok: false, message: (error as Error).message });
+    }
+};
+
+// update me controller
+export const updateMe = async (req: AuthRequest, res: Response) => {
+    try {
+        const userId = req.user?.id;
+        const data = req.body;
+        if (!userId) {
+            return res.status(apiStatusCode.NotFound).json({ ok: false, message: "Invalid request" });
+        }
+        const updatedUser = await authService.updateMe(userId, data);
+        return res.status(apiStatusCode.Success).json({ ok: true, user: updatedUser, message: "Profile updated successfully" });
+    } catch (error) {
+        return res.status(apiStatusCode.BadRequest).json({ ok: false, message: (error as Error).message });
+    }
+};
+
 // delete user by id only admin controller
 export const deleteUserById = async (req: AuthRequest, res: Response) => {
     try {
@@ -245,6 +276,25 @@ export const deleteUserById = async (req: AuthRequest, res: Response) => {
         };
         await authService.deleteUserById(userId, adminId);
         return res.status(apiStatusCode.Success).json({ ok: true, message: "User deleted successfully" });
+    } catch (error) {
+        return res.status(apiStatusCode.BadRequest).json({ ok: false, message: (error as Error).message });
+    }
+};
+
+// send direct email only admin controller
+export const sendDirectEmail = async (req: AuthRequest, res: Response) => {
+    try {
+        const adminId = req.user?.id;
+        const { id: userId } = req.params;
+        const { subject, message } = req.body;
+        if (!adminId || !userId) {
+            return res.status(apiStatusCode.NotFound).json({ ok: false, message: "Invalid request" });
+        }
+        if (!subject || !message) {
+            return res.status(apiStatusCode.BadRequest).json({ ok: false, message: "Subject and message are required" });
+        }
+        await authService.sendDirectEmail(adminId, userId, subject, message);
+        return res.status(apiStatusCode.Success).json({ ok: true, message: "Email sent successfully" });
     } catch (error) {
         return res.status(apiStatusCode.BadRequest).json({ ok: false, message: (error as Error).message });
     }

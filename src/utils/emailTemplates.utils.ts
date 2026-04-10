@@ -5,40 +5,40 @@
 
 const APP_NAME = "Ecommerce Store";
 const FRONTEND = process.env.FRONTEND_URL ?? "https://yourstore.com";
-const YEAR     = new Date().getFullYear();
+const YEAR = new Date().getFullYear();
 
 const C = {
-    brand:       "#111111",
-    accent:      "#C9A96E",
-    accentLight: "#FAF6EF",
-    bg:          "#F2F2F2",
-    white:       "#FFFFFF",
-    textDark:    "#111111",
-    textMid:     "#444444",
-    textLight:   "#888888",
-    border:      "#E5E5E5",
-    successBg:   "#F0FDF4",
-    successText: "#16A34A",
-    warningBg:   "#FFFBEB",
-    warningText: "#D97706",
-    footerBg:    "#F7F7F7",
+  brand: "#111111",
+  accent: "#C9A96E",
+  accentLight: "#FAF6EF",
+  bg: "#F2F2F2",
+  white: "#FFFFFF",
+  textDark: "#111111",
+  textMid: "#444444",
+  textLight: "#888888",
+  border: "#E5E5E5",
+  successBg: "#F0FDF4",
+  successText: "#16A34A",
+  warningBg: "#FFFBEB",
+  warningText: "#D97706",
+  footerBg: "#F7F7F7",
 } as const;
 
 interface OrderItem {
-    product:       { title: string };
-    quantity:      number;
-    price:         number;
-    selectedSize?: string;
+  product: { title: string };
+  quantity: number;
+  price: number;
+  selectedSize?: string;
 }
 interface ShippingAddress {
-    name: string; address: string; city: string;
-    state: string; country: string; postalCode: string;
+  name: string; address: string; city: string;
+  state: string; country: string; postalCode: string;
 }
 interface Order {
-    id: string; orderNumber: string; createdAt: string | Date;
-    totalAmount: number; paymentMethod?: string; paymentId?: string;
-    paymentStatus: "PAID" | "PENDING" | string;
-    orderItems: OrderItem[]; shippingAddress: ShippingAddress[];
+  id: string; orderNumber: string; createdAt: string | Date;
+  totalAmount: number; paymentMethod?: string; paymentId?: string;
+  paymentStatus: "PAID" | "PENDING" | string;
+  orderItems: OrderItem[]; shippingAddress: ShippingAddress[];
 }
 
 // ─── Shell ────────────────────────────────────────────────────────────────────
@@ -101,16 +101,16 @@ const shell = (preheader: string, body: string) => `<!DOCTYPE html>
 // ─── Reusable pieces ──────────────────────────────────────────────────────────
 
 const heading = (text: string) =>
-    `<h1 style="margin:0 0 20px;font-size:26px;font-weight:700;color:${C.textDark};letter-spacing:-0.02em;line-height:1.2;">${text}</h1>`;
+  `<h1 style="margin:0 0 20px;font-size:26px;font-weight:700;color:${C.textDark};letter-spacing:-0.02em;line-height:1.2;">${text}</h1>`;
 
 const subheading = (text: string) =>
-    `<h2 style="margin:32px 0 12px;font-size:13px;font-weight:700;color:${C.textDark};letter-spacing:0.12em;text-transform:uppercase;border-bottom:1px solid ${C.border};padding-bottom:10px;">${text}</h2>`;
+  `<h2 style="margin:32px 0 12px;font-size:13px;font-weight:700;color:${C.textDark};letter-spacing:0.12em;text-transform:uppercase;border-bottom:1px solid ${C.border};padding-bottom:10px;">${text}</h2>`;
 
 const bodyText = (text: string) =>
-    `<p style="margin:0 0 16px;font-size:15px;color:${C.textMid};line-height:1.7;">${text}</p>`;
+  `<p style="margin:0 0 16px;font-size:15px;color:${C.textMid};line-height:1.7;">${text}</p>`;
 
 const greeting = (name: string) =>
-    `<p style="margin:0 0 20px;font-size:15px;color:${C.textMid};line-height:1.7;">Hi <strong style="color:${C.textDark};">${name}</strong>,</p>`;
+  `<p style="margin:0 0 20px;font-size:15px;color:${C.textMid};line-height:1.7;">Hi <strong style="color:${C.textDark};">${name}</strong>,</p>`;
 
 const btn = (href: string, label: string) => `
 <table cellpadding="0" cellspacing="0" border="0" style="margin:32px 0;">
@@ -161,8 +161,8 @@ const successBadge = (label: string) => `
 </table>`;
 
 const statusPill = (status: string) => {
-    const paid = status === "PAID";
-    return `<span style="display:inline-block;padding:5px 14px;font-size:11px;font-weight:700;letter-spacing:0.1em;text-transform:uppercase;background:${paid ? C.successBg : C.warningBg};color:${paid ? C.successText : C.warningText};border:1px solid ${paid ? "#BBF7D0" : "#FDE68A"};">${paid ? "Paid" : "Pending"}</span>`;
+  const paid = status === "PAID";
+  return `<span style="display:inline-block;padding:5px 14px;font-size:11px;font-weight:700;letter-spacing:0.1em;text-transform:uppercase;background:${paid ? C.successBg : C.warningBg};color:${paid ? C.successText : C.warningText};border:1px solid ${paid ? "#BBF7D0" : "#FDE68A"};">${paid ? "Paid" : "Pending"}</span>`;
 };
 
 const fallback = (link: string) => `
@@ -172,15 +172,15 @@ const fallback = (link: string) => `
 </p>`;
 
 const securityNote = (msg: string) =>
-    `<p style="margin:20px 0 0;font-size:12px;color:${C.textLight};line-height:1.7;border-top:1px solid ${C.border};padding-top:20px;">${msg}</p>`;
+  `<p style="margin:20px 0 0;font-size:12px;color:${C.textLight};line-height:1.7;border-top:1px solid ${C.border};padding-top:20px;">${msg}</p>`;
 
 const divider = () =>
-    `<table cellpadding="0" cellspacing="0" border="0" width="100%"><tr><td style="border-top:1px solid ${C.border};padding:0;margin:28px 0;font-size:0;">&nbsp;</td></tr></table>`;
+  `<table cellpadding="0" cellspacing="0" border="0" width="100%"><tr><td style="border-top:1px solid ${C.border};padding:0;margin:28px 0;font-size:0;">&nbsp;</td></tr></table>`;
 
 // ─── Templates ────────────────────────────────────────────────────────────────
 
 export const getVerificationEmail = (name: string, link: string) =>
-    shell("Verify your email address", `
+  shell("Verify your email address", `
         ${greeting(name)}
         ${heading("Verify your email address")}
         ${bodyText("Thanks for signing up. Please confirm your email address to activate your account and start shopping.")}
@@ -190,7 +190,7 @@ export const getVerificationEmail = (name: string, link: string) =>
     `);
 
 export const getForgotPasswordEmail = (name: string, link: string) =>
-    shell("Reset your password", `
+  shell("Reset your password", `
         ${greeting(name)}
         ${heading("Reset your password")}
         ${bodyText("We received a request to reset the password for your account. Click the button below to choose a new password.")}
@@ -201,7 +201,7 @@ export const getForgotPasswordEmail = (name: string, link: string) =>
     `);
 
 export const getForgotPasswordOtpEmail = (name: string, code: string, link: string) =>
-    shell("Your password reset code", `
+  shell("Your password reset code", `
         ${greeting(name)}
         ${heading("Your password reset code")}
         ${bodyText("We received a request to reset your password. Use the code below, or click the button to reset directly.")}
@@ -213,7 +213,7 @@ export const getForgotPasswordOtpEmail = (name: string, code: string, link: stri
     `);
 
 export const getOtpEmail = (name: string, code: string) =>
-    shell("Your security code", `
+  shell("Your security code", `
         ${greeting(name)}
         ${heading("Your security code")}
         ${bodyText("Use the code below to complete your verification. Do not share this code with anyone.")}
@@ -222,13 +222,13 @@ export const getOtpEmail = (name: string, code: string) =>
     `);
 
 export const getOrderConfirmationEmail = (name: string, order: Order) => {
-    const date = new Date(order.createdAt).toLocaleDateString("en-IN", {
-        day: "numeric", month: "long", year: "numeric",
-    });
+  const date = new Date(order.createdAt).toLocaleDateString("en-IN", {
+    day: "numeric", month: "long", year: "numeric",
+  });
 
-    const addr = order.shippingAddress[0];
+  const addr = order.shippingAddress[0];
 
-    const itemRows = order.orderItems.map((item, i) => `
+  const itemRows = order.orderItems.map((item, i) => `
         <tr style="background:${i % 2 === 0 ? C.white : C.footerBg};">
             <td style="padding:14px 16px;font-size:14px;color:${C.textDark};border-bottom:1px solid ${C.border};">
                 <strong>${item.product.title}</strong>
@@ -239,7 +239,7 @@ export const getOrderConfirmationEmail = (name: string, order: Order) => {
         </tr>
     `).join("");
 
-    return shell("Order Confirmed", `
+  return shell("Order Confirmed", `
         ${successBadge("Order Confirmed")}
         ${greeting(name)}
         ${heading("Thank you for your order")}
@@ -314,3 +314,12 @@ export const getOrderConfirmationEmail = (name: string, order: Order) => {
         ${securityNote("This is an automated confirmation. Please do not reply to this email. For help, visit our support centre.")}
     `);
 };
+
+export const getAdminDirectEmail = (name: string, subject: string, message: string) =>
+  shell(subject, `
+        ${greeting(name)}
+        ${heading(subject)}
+        ${infoBox(`<p style="margin:0;font-size:14px;color:#444444;line-height:1.7;">${message.replace(/\n/g, '<br>')}</p>`)}
+        ${securityNote(`This is a direct notification from the administration team at ${APP_NAME}.`)}
+    `);
+
