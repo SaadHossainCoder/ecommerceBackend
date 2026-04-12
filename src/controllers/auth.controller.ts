@@ -328,16 +328,16 @@ export const checkUserGuard = async (req: AuthRequest, res: Response) => {
         const refreshToken = req.cookies[CONFIG.REFRESH_COOKIE_NAME];
 
         if (!refreshToken) {
-            return res.status(400).json({ isAuthorised: false, message: "noRefreshToken" });
+            return res.status(200).json({ isAuthorised: false, message: "noRefreshToken" });
         }
 
         if (!accessToken) {
-            return res.status(400).json({ isAuthorised: false, message: "noAccessToken" });
+            return res.status(200).json({ isAuthorised: false, message: "noAccessToken" });
         }
 
         const data = authService.verifyFrontendSession(accessToken);
         return res.status(200).json(data);
     } catch (error) {
-        return res.status(400).json({ isAuthorised: false, message: (error as Error).message });
+        return res.status(200).json({ isAuthorised: false, message: (error as Error).message });
     }
 };
