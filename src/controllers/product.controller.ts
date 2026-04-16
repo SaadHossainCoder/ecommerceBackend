@@ -24,7 +24,7 @@ export const createProduct = async (req: AuthRequest, res: Response) => {
 // Get All Products
 export const getAllProducts = async (req: AuthRequest, res: Response) => {
     try {
-        const { page, limit, categoryId, featured, search, sortBy } = req.query;
+        const { page, limit, categoryId, featured, search, sortBy, showDisabled } = req.query;
         const result = await productService.getAllProducts({
             page: page ? Number(page) : undefined,
             limit: limit ? Number(limit) : undefined,
@@ -32,6 +32,7 @@ export const getAllProducts = async (req: AuthRequest, res: Response) => {
             featured: featured !== undefined ? featured === "true" : undefined,
             search: search as string,
             sortBy: sortBy as any,
+            showDisabled: showDisabled === "true",
         });
 
         return res.status(apiStatusCode.Success).json({

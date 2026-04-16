@@ -30,7 +30,7 @@ export const createReview = async (productId: string, userId: string, data: {
 
         // Check if user already reviewed this product
         const existingReview = await prisma.productReview.findFirst({
-            where: { productId, userId, deletedAt: null }
+            where: { productId, userId }
         });
         if (existingReview) {
             throw new ReviewError("You have already reviewed this product", apiStatusCode.Conflict);
@@ -86,7 +86,6 @@ export const getReviewsByProduct = async (productId: string, options: {
 
         const where = {
             productId,
-            deletedAt: null,
             ...(options.onlyApproved && { isApproved: true })
         };
 
@@ -124,7 +123,7 @@ export const getReviewsByProduct = async (productId: string, options: {
 export const getReviewsByUser = async (userId: string) => {
     try {
         const reviews = await prisma.productReview.findMany({
-            where: { userId, deletedAt: null },
+            where: { userId },
             include: {
                 product: {
                     select: { id: true, title: true, slug: true, images: true }
@@ -153,7 +152,6 @@ export const getAllReviews = async (options: {
         const skip = (page - 1) * limit;
 
         const where = {
-            deletedAt: null,
             ...(options.status === "pending" && { isApproved: false }),
             ...(options.status === "approved" && { isApproved: true })
         };
@@ -230,9 +228,8 @@ export const deleteReview = async (reviewId: string, userId?: string, isAdmin: b
             throw new ReviewError("You can only delete your own reviews", apiStatusCode.Unauthorized);
         }
 
-        await prisma.productReview.update({
-            where: { id: reviewId },
-            data: { deletedAt: new Date() }
+        await prisma.productReview.delete({
+            where: { id: reviewId }
         });
 
         // Update product rating after deletion
@@ -253,7 +250,7 @@ export const deleteReview = async (reviewId: string, userId?: string, isAdmin: b
 const updateProductRating = async (productId: string) => {
     try {
         const reviews = await prisma.productReview.findMany({
-            where: { productId, deletedAt: null, isApproved: true },
+            where: { productId, isApproved: true },
             select: { rating: true }
         });
 

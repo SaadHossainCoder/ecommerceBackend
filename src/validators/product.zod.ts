@@ -15,12 +15,15 @@ const imageSchema = z.union([
   )
 ]);
 
-// ================= SIZE =================
-const sizeSchema = z.object({
-  size: z.string().min(1),
+// ================= SUBPRODUCT =================
+const subProductSchema = z.object({
+  sku: z.string().min(3).transform(v => v.toUpperCase().trim()),
+  type: z.string().min(1), // size, color, material, etc.
   qty: z.number().int().nonnegative(),
   price: z.number().nonnegative(),
-  image: z.string().url().optional().or(z.literal("")),
+  images: z.array(z.string().url()).min(1),
+  size: z.array(z.string()).optional(),
+  sold: z.number().int().nonnegative().optional(),
 });
 
 // ================= CREATE =================
@@ -34,7 +37,7 @@ export const createProductSchema = z.object({
       .transform(v => v.toLowerCase().trim()),
 
     description: z.string().min(10),
-    longDescription: z.string().min(20),
+    longDescription: z.string().min(20).optional().or(z.literal("")),
     brand: z.string().optional(),
 
     vendorId: objectId,
@@ -48,24 +51,17 @@ export const createProductSchema = z.object({
     discount: z.number().min(0).max(100).optional(),
 
     featured: z.boolean().optional(),
+    disableProduct: z.boolean().optional(),
 
-    images: z.array(imageSchema).min(1),
+    generalImages: z.array(imageSchema).min(1),
     descriptionImages: z.array(imageSchema).optional(),
 
-    sizes: z.array(sizeSchema)
+    subProducts: z.array(subProductSchema)
       .min(1)
-      .refine((sizes) => {
-        const unique = new Set(sizes.map(s => s.size));
-        return unique.size === sizes.length;
-      }, "Duplicate sizes not allowed"),
-
-    // ✅ safer structure
-    subProducts: z.array(
-      z.object({
-        name: z.string().optional(),
-        price: z.number().optional()
-      })
-    ).optional(),
+      .refine((items) => {
+        const unique = new Set(items.map(s => s.sku));
+        return unique.size === items.length;
+      }, "Duplicate SKUs in sub-products not allowed"),
 
     ingredients: z.array(z.string()).optional(),
     benefits: z.array(z.string()).optional()
@@ -84,7 +80,7 @@ export const updateProductSchema = z.object({
       .optional(),
 
     description: z.string().min(10).optional(),
-    longDescription: z.string().min(20).optional(),
+    longDescription: z.string().min(20).optional().or(z.literal("")),
     brand: z.string().optional(),
 
     vendorId: objectId.optional(),
@@ -98,18 +94,12 @@ export const updateProductSchema = z.object({
 
     discount: z.number().min(0).max(100).optional(),
     featured: z.boolean().optional(),
+    disableProduct: z.boolean().optional(),
 
-    images: z.array(imageSchema).optional(),
+    generalImages: z.array(imageSchema).optional(),
     descriptionImages: z.array(imageSchema).optional(),
 
-    sizes: z.array(sizeSchema).optional(),
-
-    subProducts: z.array(
-      z.object({
-        name: z.string().optional(),
-        price: z.number().optional()
-      })
-    ).optional(),
+    subProducts: z.array(subProductSchema).optional(),
 
     ingredients: z.array(z.string()).optional(),
     benefits: z.array(z.string()).optional()

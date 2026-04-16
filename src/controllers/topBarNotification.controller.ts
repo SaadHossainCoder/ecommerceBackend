@@ -2,6 +2,10 @@ import { Response } from "express";
 import * as topBarNotificationService from "../Services/topBarNotification.service";
 import { apiStatusCode } from "../lib/apiCode.lib";
 import { AuthRequest } from "../types/express";
+import { redisClient } from "../cache/redis.config";
+
+const CACHE_KEY_ALL = "topBarNotifications:all";
+const CACHE_KEY_SINGLE = (id: string) => `topBarNotification:${id}`;
 
 // Create TopBarNotification
 export const createTopBarNotification = async (req: AuthRequest, res: Response) => {
@@ -26,6 +30,10 @@ export const createTopBarNotification = async (req: AuthRequest, res: Response) 
             isActive: isActive ?? undefined
         }
         const result = await topBarNotificationService.createTopBarNotification(data);
+        
+        // Invalidate cache
+        await redisClient.del(CACHE_KEY_ALL);
+        
         return res.status(result.statusCode).json({
             ok: true,
             message: result.message,
@@ -43,7 +51,23 @@ export const createTopBarNotification = async (req: AuthRequest, res: Response) 
 // Get All TopBarNotifications
 export const getAllTopBarNotifications = async (req: AuthRequest, res: Response) => {
     try {
+        // Try to get from cache
+        const cachedData = await redisClient.get(CACHE_KEY_ALL);
+        if (cachedData) {
+            return res.status(apiStatusCode.Success).json({
+                ok: true,
+                message: "Fetched from cache",
+                data: JSON.parse(cachedData)
+            });
+        }
+
         const result = await topBarNotificationService.getTopBarNotifications();
+
+        // Save to cache
+        if (result.data) {
+            await redisClient.setEx(CACHE_KEY_ALL, 3600, JSON.stringify(result.data));
+        }
+
         return res.status(result.statusCode).json({
             ok: true,
             message: result.message,
@@ -62,7 +86,24 @@ export const getAllTopBarNotifications = async (req: AuthRequest, res: Response)
 export const getTopBarNotificationById = async (req: AuthRequest, res: Response) => {
     try {
         const { id } = req.params;
+
+        // Try to get from cache
+        const cachedData = await redisClient.get(CACHE_KEY_SINGLE(id));
+        if (cachedData) {
+            return res.status(apiStatusCode.Success).json({
+                ok: true,
+                message: "Fetched from cache",
+                data: JSON.parse(cachedData)
+            });
+        }
+
         const result = await topBarNotificationService.getTopBarNotificationById(id);
+
+        // Save to cache
+        if (result.data) {
+            await redisClient.setEx(CACHE_KEY_SINGLE(id), 3600, JSON.stringify(result.data));
+        }
+
         return res.status(result.statusCode).json({
             ok: true,
             message: result.message,
@@ -81,7 +122,7 @@ export const getTopBarNotificationById = async (req: AuthRequest, res: Response)
 export const updateTopBarNotification = async (req: AuthRequest, res: Response) => {
     try {
         const { id } = req.params;
-        const { title, message, link, isActive } = req.body;
+        const { title, slug, message, link, isActive } = req.body;
         if (req.user!.role !== "ADMIN") {
             return res.status(apiStatusCode.Unauthorized).json({
                 ok: false,
@@ -90,11 +131,19 @@ export const updateTopBarNotification = async (req: AuthRequest, res: Response) 
         }
         const data = {
             title: title ?? undefined,
+            slug: slug ?? undefined,
             message: message ?? undefined,
             link: link ?? undefined,
             isActive: isActive ?? undefined
         }
         const result = await topBarNotificationService.updateTopBarNotification(id, data);
+
+        // Invalidate cache
+        await Promise.all([
+            redisClient.del(CACHE_KEY_ALL),
+            redisClient.del(CACHE_KEY_SINGLE(id))
+        ]);
+
         return res.status(result.statusCode).json({
             ok: true,
             message: result.message,
@@ -120,6 +169,13 @@ export const deleteTopBarNotification = async (req: AuthRequest, res: Response) 
             });
         }
         const result = await topBarNotificationService.deleteTopBarNotification(id);
+
+        // Invalidate cache
+        await Promise.all([
+            redisClient.del(CACHE_KEY_ALL),
+            redisClient.del(CACHE_KEY_SINGLE(id))
+        ]);
+
         return res.status(result.statusCode).json({
             ok: true,
             message: result.message,

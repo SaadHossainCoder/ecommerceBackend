@@ -184,8 +184,14 @@ export const deleteVendor = async (id: string) => {
             data: vendor,
             statusCode: apiStatusCode.Success
         };
-    } catch (error) {
+    } catch (error: any) {
         if (error instanceof VendorError) throw error;
+        
+        // Handle Prisma relation violation error
+        if (error.code === 'P2014') {
+            throw new VendorError("Cannot delete this vendor because products are still assigned to it. Please reassign or remove its products first.", apiStatusCode.Conflict);
+        }
+        
         console.error("Delete vendor error:", error);
         throw new VendorError("Failed to delete vendor", apiStatusCode.InternalServerError);
     };

@@ -26,6 +26,7 @@ export interface ProductFilterOptions {
     maxPrice?: number;
     isAvailable?: boolean | string;
     vendorId?: string;
+    showDisabled?: boolean | string;
 }
 
 // ====================== CREATE OPERATIONS ======================
@@ -36,24 +37,25 @@ export const createProduct = async (data: {
     title: string;
     slug: string;
     description: string;
-    longDescription: string;
+    longDescription?: string;
     vendorId: string;
     sku: string;
     discount?: number;
     categoryId: string;
     featured?: boolean;
-    images: Array<{ url?: string; public_url?: string } | string>;
+    generalImages: Array<{ url?: string; public_url?: string } | string>;
     descriptionImages?: Array<{ url?: string; public_url?: string } | string>;
-    sizes: Array<{ size: string; qty: number; price: number }>;
-    subProducts?: Array<any>;
+    subProducts: Array<{ sku: string; type: string; qty: number; price: number; images: string[]; size: string[] }>;
     ingredients?: any;
     benefits?: string[];
     brand?: string;
     subcategory?: string;
+    disableProduct?: boolean;
+    disableProductDate?: Date;
 }) => {
     try {
         // Validation
-       if(!data.title || !data.slug || !data.description || !data.sku || !data.categoryId || !data.vendorId || !data.images || !data.sizes){
+       if(!data.title || !data.slug || !data.description || !data.sku || !data.categoryId || !data.vendorId || !data.generalImages || !data.subProducts){
         throw new ProductError("All fields are required", apiStatusCode.BadRequest, "MISSING_FIELD");
        }
 
@@ -65,14 +67,14 @@ export const createProduct = async (data: {
             throw new ProductError("Category not found or inactive", apiStatusCode.NotFound, "CATEGORY_NOT_FOUND");
         }
 
-        // Validate sizes
-        if (!Array.isArray(data.sizes) || data.sizes.length === 0) {
-            throw new ProductError("At least one size is required", apiStatusCode.BadRequest, "INVALID_SIZES");
+        // Validate subProducts
+        if (!Array.isArray(data.subProducts) || data.subProducts.length === 0) {
+            throw new ProductError("At least one sub-product is required", apiStatusCode.BadRequest, "INVALID_SUBPRODUCTS");
         }
         
-        data.sizes.forEach(s => {
-            if (!s.size || s.qty < 0 || s.price <= 0) {
-                throw new ProductError("Invalid size data: price must be > 0 and qty >= 0", apiStatusCode.BadRequest);
+        data.subProducts.forEach(s => {
+            if (!s.sku || !s.type || s.qty < 0 || s.price <= 0 || !Array.isArray(s.images) || s.images.length === 0) {
+                throw new ProductError("Invalid sub-product data: price > 0, qty >= 0 and at least one image required", apiStatusCode.BadRequest);
             }
         });
 
@@ -101,22 +103,31 @@ export const createProduct = async (data: {
                 title: data.title.trim(),
                 slug,
                 description: data.description.trim(),
-                longDescription: data.longDescription.trim(),
+                longDescription: data.longDescription?.trim() || "",
                 vendorId: data.vendorId,
                 sku,
                 categoryId: data.categoryId,
                 featured: data.featured || false,
                 discount: data.discount || 0,
-                images: processImages(data.images),
+                generalImages: processImages(data.generalImages),
                 descriptionImages: processImages(data.descriptionImages || []),
-                sizes: data.sizes,
-                subProducts: data.subProducts || [],
+                subProducts: data.subProducts.map(s => ({
+                    sku: s.sku.toUpperCase().trim(),
+                    type: s.type,
+                    qty: s.qty,
+                    price: s.price,
+                    images: s.images,
+                    size: s.size,
+                    sold: 0
+                })),
                 ingredients: {
                     details: data.ingredients || {},
                     benefits: data.benefits || [],
                     brand: data.brand || "",
                     subcategory: data.subcategory || ""
                 },
+                disableProduct: data.disableProduct || false,
+                disableProductDate: data.disableProduct ? (data.disableProductDate || new Date()) : null,
             },
             include: {
                 category: { select: { id: true, name: true, slug: true } },
@@ -161,11 +172,12 @@ export const getAllProducts = async (options: ProductFilterOptions = {}) => {
                     { description: { contains: options.search, mode: "insensitive" } },
                     { sku: { contains: options.search, mode: "insensitive" } },
                 ]
-            })
+            }),
+            ...(options.showDisabled !== "true" && options.showDisabled !== true && { disableProduct: false })
         };
 
         if (options.minPrice || options.maxPrice) {
-            where.sizes = {
+            where.subProducts = {
                 some: {
                     price: {
                         ...(options.minPrice && { gte: Number(options.minPrice) }),
@@ -182,8 +194,8 @@ export const getAllProducts = async (options: ProductFilterOptions = {}) => {
             case "rating": orderBy = { rating: "desc" }; break;
             case "sold": orderBy = { sold: "desc" }; break;
             case "discount": orderBy = { discount: "desc" }; break;
-            case "price_asc": orderBy = { sizes: { _count: "asc" } as any }; break;
-            case "price_desc": orderBy = { sizes: { _count: "desc" } as any }; break;
+            case "price_asc": orderBy = { subProducts: { _count: "asc" } as any }; break;
+            case "price_desc": orderBy = { subProducts: { _count: "desc" } as any }; break;
             case "newest": default: orderBy = { createdAt: "desc" };
         }
 
@@ -229,7 +241,7 @@ export const getAllProducts = async (options: ProductFilterOptions = {}) => {
 export const getFeaturedProducts = async (limit: number = 6) => {
     try {
         return await prisma.product.findMany({
-            where: { featured: true },
+            where: { featured: true, disableProduct: false },
             orderBy: { createdAt: "desc" },
             take: limit,
             include: {
@@ -257,7 +269,8 @@ export const searchProducts = async (query: string, limit: number = 20) => {
                     { title: { contains: query, mode: "insensitive" } },
                     { sku: { contains: query, mode: "insensitive" } },
                     { description: { contains: query, mode: "insensitive" } }
-                ]
+                ],
+                disableProduct: false
             },
             take: limit,
             include: {
@@ -326,20 +339,21 @@ export const updateProduct = async (id: string, data: Partial<{
     title: string;
     slug: string;
     description: string;
-    longDescription: string;
+    longDescription?: string;
     vendorId: string;
     discount: number;
     featured: boolean;
     productIsAvailable: boolean;
     categoryId: string;
-    images: any[];
+    generalImages: any[];
     descriptionImages: any[];
-    sizes: any[];
     subProducts: any[];
     ingredients: any;
     benefits: string[];
     brand: string;
     subcategory: string;
+    disableProduct: boolean;
+    disableProductDate: Date;
 }>) => {
     try {
         if (!id) throw new ProductError("Product ID is required", apiStatusCode.BadRequest);
@@ -361,10 +375,9 @@ export const updateProduct = async (id: string, data: Partial<{
             ...(data.featured !== undefined && { featured: data.featured }),
             ...(data.productIsAvailable !== undefined && { productIsAvailable: data.productIsAvailable }),
             ...(data.discount !== undefined && { discount: Math.max(0, Math.min(100, data.discount)) }),
-            ...(data.images && { images: processImages(data.images) }),
-            ...(data.descriptionImages && { images: processImages(data.descriptionImages) }),
+            ...(data.generalImages && { generalImages: processImages(data.generalImages) }),
+            ...(data.descriptionImages && { descriptionImages: processImages(data.descriptionImages) }),
             ...(data.subProducts && { subProducts: data.subProducts }),
-            ...(data.sizes && { sizes: data.sizes }),
             ...((data.ingredients || data.benefits || data.brand || data.subcategory) && {
                 ingredients: {
                     ...(typeof product.ingredients === 'object' ? (product.ingredients as any) : {}),
@@ -373,6 +386,10 @@ export const updateProduct = async (id: string, data: Partial<{
                     ...(data.brand && { brand: data.brand }),
                     ...(data.subcategory && { subcategory: data.subcategory }),
                 }
+            }),
+            ...(data.disableProduct !== undefined && { 
+                disableProduct: data.disableProduct,
+                disableProductDate: data.disableProduct ? new Date() : null
             })
         };
 
@@ -387,11 +404,12 @@ export const updateProduct = async (id: string, data: Partial<{
             if (!cat) throw new ProductError("Category not found", apiStatusCode.NotFound);
         }
 
-        if (data.sizes) {
-            data.sizes.forEach(s => {
-                if (!s.size || s.qty < 0 || s.price <= 0) throw new ProductError("Invalid size data", apiStatusCode.BadRequest);
+        if (data.subProducts) {
+            data.subProducts.forEach(s => {
+                if (!s.sku || !s.type || s.qty < 0 || s.price <= 0) throw new ProductError("Invalid sub-product data", apiStatusCode.BadRequest);
             });
         }
+     
 
         return await prisma.product.update({
             where: { id },

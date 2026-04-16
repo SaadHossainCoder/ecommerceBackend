@@ -83,23 +83,16 @@ type Image {
   publicUrl String?
 }
 
-type ProductSize {
-  size   String
+type SubProduct {
+  sku    String
+  type   String   // size , color , material , other....
   qty    Int      @default(0)
   price  Int
-  image  String?
   images String[]
+  size   String[]
   sold   Int      @default(0)
 }
 
-type SubProduct {
-  sku               String?
-  images            String[]
-  descriptionImages String[]
-  sizes             ProductSize[]
-  discount          Int?          @default(0)
-  sold              Int?          @default(0)
-}
 
 model Product {
   id                String   @id @default(auto()) @map("_id") @db.ObjectId
@@ -108,7 +101,7 @@ model Product {
   description       String
   longDescription   String?
   sku               String   @unique
-  images            String[]
+  generalImages     String[]
   descriptionImages String[]
 
   featured           Boolean @default(false)
@@ -116,21 +109,22 @@ model Product {
 
   discount Int @default(0)
   sold     Int @default(0)
+  disableProduct Boolean? @default(false)
+  disableProductDate DateTime?
 
   rating     Float @default(0)
   numReviews Int   @default(0)
 
   // Custom types
-  sizes       ProductSize[]
   subProducts SubProduct[]
   ingredients Json?
 
   // Relations
   vendorId String @db.ObjectId
-  vendor   Vendor @relation("VendorProducts", fields: [vendorId], references: [id])
+  vendor   Vendor @relation("VendorProducts", fields: [vendorId], references: [id], onDelete: Cascade)
 
   categoryId String   @db.ObjectId
-  category   Category @relation("CategoryProducts", fields: [categoryId], references: [id])
+  category   Category @relation("CategoryProducts", fields: [categoryId], references: [id], onDelete: Cascade)
 
   productReviews ProductReview[] @relation("UserProductReviews")
   cartItems      CartItem[]      @relation("UserCartItems")
@@ -142,6 +136,7 @@ model Product {
 
   @@index([vendorId])
   @@index([categoryId])
+  @@index([disableProduct])
   @@index([createdAt(sort: Desc)])
   @@map("products")
 }
@@ -265,22 +260,52 @@ type ShippingAddress {
   country    String
 }
 
+
+type PhonePePaymentResponse {
+  success Boolean
+  code String
+  message String
+  data PaymentData
+}
+
+// Core Payment Data Type
+type PaymentData {
+  merchantId String
+  merchantTransactionId String
+  transactionId String
+  amount Int
+  state String
+  responseCode String
+  paymentInstrument PaymentInstrument
+}
+
+// Payment Instrument (UPI, Card, Net Banking, Wallet, etc.)
+type PaymentInstrument {
+  type String
+  utr String?
+  cardType String?
+  bankTransactionId String?
+  arn String?
+  bankId String?
+}
+
 model Order {
   id             String        @id @default(auto()) @map("_id") @db.ObjectId
   orderNumber    String        @unique // User-friendly order ID
-  status         OrderStatus   @default(PENDING) // PENDING | CONFIRMED | SHIPPED | DELIVERED | CANCELLED
-  paymentStatus  PaymentStatus @default(UNPAID) // UNPAID | PAID | FAILED | REFUNDED
   totalAmount    Int
   taxAmount      Int           @default(0)
   shippingAmount Int           @default(0)
   discountAmount Int           @default(0)
 
   // Shipping info
-  shippingAddress ShippingAddress[]
+  shippingAddress ShippingAddress
 
   // Payment info
-  paymentMethod PaymentMethod? // CARD | UPI | NET_BANKING | COD
+  paymentData PaymentData
+  paymentMethod PaymentMethod
   transactionId String?
+  status PaymentStatus
+  orderStatus OrderStatus
 
   userId String @db.ObjectId
   user   User   @relation("UserOrders", fields: [userId], references: [id], onDelete: Cascade, onUpdate: Cascade)
@@ -293,7 +318,7 @@ model Order {
 
   @@index([userId])
   @@index([status])
-  @@index([paymentStatus])
+  @@index([orderStatus])
   @@index([createdAt(sort: Desc)])
   @@map("orders")
 }
@@ -373,6 +398,7 @@ type BannerLink {
 model Banner {
   id          String     @id @default(auto()) @map("_id") @db.ObjectId
   title       String
+  slug        String
   description String
   image       String?
   link        String?
@@ -381,6 +407,7 @@ model Banner {
   updatedAt   DateTime   @updatedAt
 
   @@map("banners")
+  @@unique([slug])
 }
 
 model TopBarNotification {

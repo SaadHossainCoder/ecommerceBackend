@@ -20,7 +20,7 @@ router.post("/sub", authGuard(['ADMIN']), validateZod(categoryZod.createSubCateg
 
 // ✅ UPDATE + DELETE
 router.put("/:id", authGuard(['ADMIN']), validateZod(categoryZod.updateCategorySchema), categoryController.updateCategory);
-router.delete("/hard/:id", authGuard(['ADMIN']), categoryController.hardDeleteCategory);
+router.delete("/:id", authGuard(['ADMIN']), categoryController.hardDeleteCategory);
 
 // ❗ ALWAYS LAST
 router.get("/:id", categoryController.getCategoryById);
