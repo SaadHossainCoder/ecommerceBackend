@@ -206,7 +206,7 @@ export const getAllProducts = async (options: ProductFilterOptions = {}) => {
                 skip,
                 take: limit,
                 include: {
-                    category: { select: { id: true, name: true, slug: true } },
+                    category: { select: { id: true, name: true, slug: true, parentCategory: { select: { id: true, name: true, slug: true } } } },
                     vendor: { select: { id: true, name: true } },
                     _count: { select: { productReviews: { where: { isApproved: true } } } }
                 }
@@ -245,7 +245,7 @@ export const getFeaturedProducts = async (limit: number = 6) => {
             orderBy: { createdAt: "desc" },
             take: limit,
             include: {
-                category: { select: { id: true, name: true, slug: true } },
+                category: { select: { id: true, name: true, slug: true, parentCategory: { select: { id: true, name: true, slug: true } } } },
                 vendor: { select: { id: true, name: true } }
             }
         });
@@ -293,7 +293,7 @@ export const getProductById = async (id: string) => {
     const product = await prisma.product.findFirst({
         where: { id },
         include: {
-            category: { select: { id: true, name: true, slug: true } },
+            category: { select: { id: true, name: true, slug: true, parentCategory: { select: { id: true, name: true, slug: true } } } },
             vendor: { select: { id: true, name: true } },
             productReviews: {
                 where: { isApproved: true },
@@ -317,7 +317,7 @@ export const getProductBySlug = async (slug: string) => {
     const product = await prisma.product.findFirst({
         where: { slug: slug.toLowerCase() },
         include: {
-            category: { select: { id: true, name: true, slug: true } },
+            category: { select: { id: true, name: true, slug: true, parentCategory: { select: { id: true, name: true, slug: true } } } },
             vendor: { select: { id: true, name: true } },
             productReviews: {
                 where: { isApproved: true },

@@ -4,6 +4,7 @@ import { apiStatusCode } from "../lib/apiCode.lib";
 import { AuthRequest } from "../types/express";
 import { redisClient } from "../cache/redis.config";
 
+// Cache keys
 const CACHE_KEY_ALL = "topBarNotifications:all";
 const CACHE_KEY_SINGLE = (id: string) => `topBarNotification:${id}`;
 
@@ -54,20 +55,21 @@ export const getAllTopBarNotifications = async (req: AuthRequest, res: Response)
         // Try to get from cache
         const cachedData = await redisClient.get(CACHE_KEY_ALL);
         if (cachedData) {
+            console.log("hit cache");
             return res.status(apiStatusCode.Success).json({
                 ok: true,
                 message: "Fetched from cache",
                 data: JSON.parse(cachedData)
             });
         }
-
+        console.log("hit database");
         const result = await topBarNotificationService.getTopBarNotifications();
-
+        
         // Save to cache
         if (result.data) {
             await redisClient.setEx(CACHE_KEY_ALL, 3600, JSON.stringify(result.data));
         }
-
+        
         return res.status(result.statusCode).json({
             ok: true,
             message: result.message,
