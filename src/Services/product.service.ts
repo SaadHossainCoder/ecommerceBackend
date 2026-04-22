@@ -498,6 +498,103 @@ export const addProductReview = async (productId: string, userId: string, data: 
     }
 };
 
+// ====================== REVIEW OPERATIONS ======================
+export const getProductReviews = async (productId: string) => {
+    try {
+        if (!productId) throw new ProductError("Missing IDs", apiStatusCode.BadRequest);
+
+        const reviews = await prisma.productReview.findMany({
+            where: { productId },
+            include: {
+                user: {
+                    select: { id: true, username: true },
+                },
+                product: {
+                    select: {
+                        id: true,
+                        title: true,
+                        slug: true,
+                        generalImages: true,
+                        subProducts: true,
+                    },
+                },
+            },
+            orderBy: { createdAt: 'desc' },
+        });
+
+        return reviews;
+    } catch (error: any) {
+        throw new ProductError(error?.message || "Failed to fetch reviews");
+    }
+};
+
+export const getAllReviews = async () => {
+    try {
+        const reviews = await prisma.productReview.findMany({
+            include: {
+                user: {
+                    select: { id: true, username: true, email: true },
+                },
+                product: {
+                    select: {
+                        id: true,
+                        title: true,
+                        slug: true,
+                        generalImages: true,
+                        subProducts: true,
+                    },
+                },
+            },
+            orderBy: { createdAt: 'desc' },
+        });
+
+        return reviews;
+    } catch (error: any) {
+        throw new ProductError(error?.message || "Failed to fetch reviews");
+    }
+};
+
+export const updateReview = async (reviewId: string, data: { rating: number; comment: string }) => {
+    try {
+        if (!reviewId) throw new ProductError("Missing IDs", apiStatusCode.BadRequest);
+
+        const review = await prisma.productReview.findFirst({ where: { id: reviewId } });
+        if (!review) throw new ProductError("Review not found", apiStatusCode.NotFound);
+
+        await prisma.productReview.update({
+            where: { id: reviewId },
+            data: {
+                rating: data.rating,
+                comment: data.comment.trim(),
+                isApproved: true
+            }
+        });
+
+        await updateProductRating(review.productId);
+        return { success: true, message: "Review updated successfully" };
+    } catch (error: any) {
+        throw new ProductError(error?.message || "Failed to update review");
+    }
+};
+
+export const deleteReview = async (reviewId: string) => {
+    try {
+        if (!reviewId) throw new ProductError("Missing IDs", apiStatusCode.BadRequest);
+
+        const review = await prisma.productReview.findFirst({ where: { id: reviewId } });
+        if (!review) throw new ProductError("Review not found", apiStatusCode.NotFound);
+
+        await prisma.productReview.delete({
+            where: { id: reviewId }
+        });
+
+        await updateProductRating(review.productId);
+        return { success: true, message: "Review deleted successfully" };
+    } catch (error: any) {
+        throw new ProductError(error?.message || "Failed to delete review");
+    }
+};
+
 // ====================== HELPERS ======================
 const updateProductRating = async (productId: string) => {
     const reviews = await prisma.productReview.findMany({

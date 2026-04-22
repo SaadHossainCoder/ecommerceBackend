@@ -18,6 +18,11 @@ const CACHE_KEY_CATEGORY_PREFIX = "products:category:*";
 const CACHE_KEY_PAGINATION_PREFIX = "products:pagination:*";
 const CACHE_KEY_PAGINATION = (page?: string, limit?: string, categoryId?: string, featured?: boolean, search?: string, sortBy?: string, showDisabled?: boolean) => `products:pagination:${page}:${limit}:${categoryId}:${featured}:${search}:${sortBy}:${showDisabled}`;
 
+//review cache keys
+const CACHE_KEY_REVIEW = (productId: string) => `product:review:${productId}`;
+const CACHE_KEY_REVIEW_PREFIX = "product:review:*";
+
+
 // Helper to clear pattern-based caches
 const clearCachePattern = async (pattern: string) => {
     try {
@@ -169,7 +174,7 @@ export const getFeaturedProducts = async (req: AuthRequest, res: Response) => {
         const limit = req.query.limit ? Number(req.query.limit) : 6;
         const categoryId = req.query.categoryId as string | undefined;
         const cacheKey = CACHE_KEY_FEATURED(categoryId);
-        
+
         const cachedData = await redisClient.get(cacheKey);
         if (cachedData) {
             return res.status(apiStatusCode.Success).json({
@@ -211,9 +216,9 @@ export const searchProducts = async (req: AuthRequest, res: Response) => {
             query as string,
             limit ? Number(limit) : 20
         );
-        
+
         await redisClient.setEx(cacheKey, 300, JSON.stringify(result));
-        
+
         return res.status(apiStatusCode.Success).json({
             ok: true,
             message: "Products searched successfully",
@@ -303,6 +308,105 @@ export const addReview = async (req: AuthRequest, res: Response) => {
         return res.status(statusCode).json({
             ok: false,
             message: error.message || "Failed to add review",
+        });
+    }
+};
+
+// Admin route
+export const getAllReviews = async (req: AuthRequest, res: Response) => {
+    try {
+        const cacheKey = CACHE_KEY_REVIEW_PREFIX;
+        const cachedData = await redisClient.get(cacheKey);
+        if (cachedData) {
+            return res.status(apiStatusCode.Success).json({
+                ok: true,
+                message: "Reviews fetched successfully",
+                data: JSON.parse(cachedData),
+            });
+        }
+        const result = await productService.getAllReviews();
+        await redisClient.setEx(cacheKey, 300, JSON.stringify(result));
+        return res.status(apiStatusCode.Success).json({
+            ok: true,
+            message: "Reviews fetched successfully",
+            data: result,
+        });
+    } catch (error: any) {
+        const statusCode = error.statusCode || apiStatusCode.InternalServerError;
+        return res.status(statusCode).json({
+            ok: false,
+            message: error.message || "Failed to fetch reviews",
+        });
+    }
+};
+
+// Get Product Reviews
+export const getProductReviews = async (req: AuthRequest, res: Response) => {
+    try {
+        const cacheKey = CACHE_KEY_REVIEW(req.params.id);
+        const cachedData = await redisClient.get(cacheKey);
+        if (cachedData) {
+            return res.status(apiStatusCode.Success).json({
+                ok: true,
+                message: "Reviews fetched successfully",
+                data: JSON.parse(cachedData),
+            });
+        }
+        const result = await productService.getProductReviews(req.params.id);
+        await redisClient.setEx(cacheKey, 300, JSON.stringify(result));
+        return res.status(apiStatusCode.Success).json({
+            ok: true,
+            message: "Reviews fetched successfully",
+            data: result,
+        });
+    } catch (error: any) {
+        const statusCode = error.statusCode || apiStatusCode.InternalServerError;
+        return res.status(statusCode).json({
+            ok: false,
+            message: error.message || "Failed to fetch reviews",
+        });
+    }
+};
+
+// Update Review
+export const updateReview = async (req: AuthRequest, res: Response) => {
+    try {
+        const result = await productService.updateReview(req.params.reviewId, req.body);
+        await Promise.all([
+            redisClient.del(CACHE_KEY_REVIEW(req.params.reviewId)),
+            clearCachePattern(CACHE_KEY_REVIEW_PREFIX),
+        ]);
+
+        return res.status(apiStatusCode.Success).json({
+            ok: true,
+            ...result,
+        });
+    } catch (error: any) {
+        const statusCode = error.statusCode || apiStatusCode.InternalServerError;
+        return res.status(statusCode).json({
+            ok: false,
+            message: error.message || "Failed to update review",
+        });
+    }
+};
+
+// Delete Review
+export const deleteReview = async (req: AuthRequest, res: Response) => {
+    try {
+        const result = await productService.deleteReview(req.params.reviewId);
+        await Promise.all([
+            redisClient.del(CACHE_KEY_REVIEW(req.params.reviewId)),
+            clearCachePattern(CACHE_KEY_REVIEW_PREFIX),
+        ]);
+        return res.status(apiStatusCode.Success).json({
+            ok: true,
+            ...result,
+        });
+    } catch (error: any) {
+        const statusCode = error.statusCode || apiStatusCode.InternalServerError;
+        return res.status(statusCode).json({
+            ok: false,
+            message: error.message || "Failed to delete review",
         });
     }
 };

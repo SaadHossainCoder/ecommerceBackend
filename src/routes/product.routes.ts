@@ -11,13 +11,21 @@ productRouter.get("/", productController.getAllProducts);
 productRouter.get("/featured", productController.getFeaturedProducts);
 productRouter.get("/search", productController.searchProducts);
 productRouter.get("/slug/:slug", productController.getProductBySlug);
-productRouter.get("/:id", productController.getProductById);
-
-// ====================== AUTHENTICATED USER ROUTES ======================
-productRouter.post("/:id/review", authGuard(["USER"]), validateZod(productZod.addReviewSchema), productController.addReview);
 
 // ====================== ADMIN ROUTES ======================
+productRouter.get("/reviews", authGuard(["ADMIN"]), productController.getAllReviews);
 productRouter.post("/", authGuard(["ADMIN"]), validateZod(productZod.createProductSchema), productController.createProduct);
+productRouter.put("/review/:reviewId", authGuard(["ADMIN"]), productController.updateReview);
+productRouter.delete("/review/:reviewId", authGuard(["ADMIN"]), productController.deleteReview);
+
+// ====================== AUTHENTICATED USER ROUTES ======================
+productRouter.post("/:id/review", authGuard(["USER", "ADMIN"]), validateZod(productZod.addReviewSchema), productController.addReview);
+
+// ====================== DYNAMIC PUBLIC ROUTES (MUST BE LAST) ======================
+productRouter.get("/:id/reviews", productController.getProductReviews);
+productRouter.get("/:id", productController.getProductById);
+
+// ====================== DYNAMIC ADMIN ROUTES (MUST BE LAST) ======================
 productRouter.put("/:id", authGuard(["ADMIN"]), validateZod(productZod.updateProductSchema), productController.updateProduct);
 productRouter.delete("/:id", authGuard(["ADMIN"]), productController.deleteProduct);
 
