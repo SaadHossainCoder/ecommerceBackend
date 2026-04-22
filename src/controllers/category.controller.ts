@@ -146,6 +146,34 @@ export const getCategoryBySlug = async (req: Request, res: Response) => {
     }
 };
 
+export const getSubCategories = async (req: Request, res: Response) => {
+    try {
+        const { id } = req.params;
+        // Try to get from cache
+        const cachedData = await redisClient.get(CACHE_KEY_SINGLE(id));
+        if (cachedData) {
+            console.log("hit cache");
+            return res.status(apiStatusCode.Success).json({
+                ok: true,
+                message: "Category fetched successfully",
+                data: JSON.parse(cachedData)
+            });
+        }
+        console.log("miss cache");
+        const category = await categoryService.getSubCategories(id);
+        // Save to cache
+        await redisClient.setEx(CACHE_KEY_SINGLE(id), 300, JSON.stringify(category));
+        return res.status(apiStatusCode.Success).json({
+            ok: true,
+            message: "Category fetched successfully",
+            data: category
+        });
+    } catch (error: any) {
+        const statusCode = error.statusCode || apiStatusCode.InternalServerError;
+        return res.status(statusCode).json({ ok: false, message: error.message });
+    }
+};
+
 // Update Category
 export const updateCategory = async (req: Request, res: Response) => {
     try {

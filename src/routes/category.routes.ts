@@ -23,6 +23,7 @@ router.put("/:id", authGuard(['ADMIN']), validateZod(categoryZod.updateCategoryS
 router.delete("/:id", authGuard(['ADMIN']), categoryController.hardDeleteCategory);
 
 // ❗ ALWAYS LAST
+router.get("/:id/subcategories", categoryController.getSubCategories);
 router.get("/:id", categoryController.getCategoryById);
 
 export default router;

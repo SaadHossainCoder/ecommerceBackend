@@ -55,9 +55,9 @@ export const createProduct = async (data: {
 }) => {
     try {
         // Validation
-       if(!data.title || !data.slug || !data.description || !data.sku || !data.categoryId || !data.vendorId || !data.generalImages || !data.subProducts){
-        throw new ProductError("All fields are required", apiStatusCode.BadRequest, "MISSING_FIELD");
-       }
+        if (!data.title || !data.slug || !data.description || !data.sku || !data.categoryId || !data.vendorId || !data.generalImages || !data.subProducts) {
+            throw new ProductError("All fields are required", apiStatusCode.BadRequest, "MISSING_FIELD");
+        }
 
         // Check if category exists
         const category = await prisma.category.findUnique({
@@ -71,7 +71,7 @@ export const createProduct = async (data: {
         if (!Array.isArray(data.subProducts) || data.subProducts.length === 0) {
             throw new ProductError("At least one sub-product is required", apiStatusCode.BadRequest, "INVALID_SUBPRODUCTS");
         }
-        
+
         data.subProducts.forEach(s => {
             if (!s.sku || !s.type || s.qty < 0 || s.price <= 0 || !Array.isArray(s.images) || s.images.length === 0) {
                 throw new ProductError("Invalid sub-product data: price > 0, qty >= 0 and at least one image required", apiStatusCode.BadRequest);
@@ -94,7 +94,7 @@ export const createProduct = async (data: {
         }
 
         // Process images
-        const processImages = (imgs: any[]) => imgs?.map(img => 
+        const processImages = (imgs: any[]) => imgs?.map(img =>
             typeof img === 'string' ? img : (img?.url || img?.public_url)
         ).filter(Boolean) as string[] || [];
 
@@ -160,11 +160,11 @@ export const getAllProducts = async (options: ProductFilterOptions = {}) => {
         const where: Prisma.ProductWhereInput = {
             ...(options.categoryId && { categoryId: options.categoryId }),
             ...(options.vendorId && { vendorId: options.vendorId }),
-            ...(options.featured !== undefined && { 
-                featured: options.featured === "true" || options.featured === true 
+            ...(options.featured !== undefined && {
+                featured: options.featured === "true" || options.featured === true
             }),
-            ...(options.isAvailable !== undefined && { 
-                productIsAvailable: options.isAvailable === "true" || options.isAvailable === true 
+            ...(options.isAvailable !== undefined && {
+                productIsAvailable: options.isAvailable === "true" || options.isAvailable === true
             }),
             ...(options.search && {
                 OR: [
@@ -213,7 +213,7 @@ export const getAllProducts = async (options: ProductFilterOptions = {}) => {
             }),
             prisma.product.count({ where })
         ]);
-        if(!products){
+        if (!products) {
             throw new ProductError("Products not found", apiStatusCode.NotFound, "NOT_FOUND");
         }
         return {
@@ -238,10 +238,14 @@ export const getAllProducts = async (options: ProductFilterOptions = {}) => {
 /**
  * Get featured products
  */
-export const getFeaturedProducts = async (limit: number = 6) => {
+export const getFeaturedProducts = async (limit: number = 6, categoryId?: string) => {
     try {
         return await prisma.product.findMany({
-            where: { featured: true, disableProduct: false },
+            where: {
+                featured: true,
+                disableProduct: false,
+                ...(categoryId && { categoryId })
+            },
             orderBy: { createdAt: "desc" },
             take: limit,
             include: {
@@ -293,7 +297,15 @@ export const getProductById = async (id: string) => {
     const product = await prisma.product.findFirst({
         where: { id },
         include: {
-            category: { select: { id: true, name: true, slug: true, parentCategory: { select: { id: true, name: true, slug: true } } } },
+            category: {
+                select: {
+                    id: true,
+                    name: true,
+                    slug: true,
+                    parentCategory: { select: { id: true, name: true, slug: true } },
+                    subCategories: { select: { id: true, name: true, slug: true } }
+                }
+            },
             vendor: { select: { id: true, name: true } },
             productReviews: {
                 where: { isApproved: true },
@@ -317,7 +329,13 @@ export const getProductBySlug = async (slug: string) => {
     const product = await prisma.product.findFirst({
         where: { slug: slug.toLowerCase() },
         include: {
-            category: { select: { id: true, name: true, slug: true, parentCategory: { select: { id: true, name: true, slug: true } } } },
+            category: {
+                select: {
+                    id: true, name: true, slug: true,
+                    parentCategory: { select: { id: true, name: true, slug: true } },
+                    subCategories: { select: { id: true, name: true, slug: true } }
+                }
+            },
             vendor: { select: { id: true, name: true } },
             productReviews: {
                 where: { isApproved: true },
@@ -361,7 +379,7 @@ export const updateProduct = async (id: string, data: Partial<{
         const product = await prisma.product.findFirst({ where: { id } });
         if (!product) throw new ProductError("Product not found", apiStatusCode.NotFound);
 
-        const processImages = (imgs: any[]) => imgs?.map(img => 
+        const processImages = (imgs: any[]) => imgs?.map(img =>
             typeof img === 'string' ? img : (img?.url || img?.public_url)
         ).filter(Boolean);
 
@@ -387,7 +405,7 @@ export const updateProduct = async (id: string, data: Partial<{
                     ...(data.subcategory && { subcategory: data.subcategory }),
                 }
             }),
-            ...(data.disableProduct !== undefined && { 
+            ...(data.disableProduct !== undefined && {
                 disableProduct: data.disableProduct,
                 disableProductDate: data.disableProduct ? new Date() : null
             })
@@ -398,7 +416,7 @@ export const updateProduct = async (id: string, data: Partial<{
             const existing = await prisma.product.findFirst({ where: { slug: data.slug.toLowerCase().trim(), id: { not: id } } });
             if (existing) throw new ProductError("Slug already in use", apiStatusCode.Conflict);
         }
-        
+
         if (data.categoryId) {
             const cat = await prisma.category.findUnique({ where: { id: data.categoryId } as any });
             if (!cat) throw new ProductError("Category not found", apiStatusCode.NotFound);
@@ -409,7 +427,7 @@ export const updateProduct = async (id: string, data: Partial<{
                 if (!s.sku || !s.type || s.qty < 0 || s.price <= 0) throw new ProductError("Invalid sub-product data", apiStatusCode.BadRequest);
             });
         }
-     
+
 
         return await prisma.product.update({
             where: { id },
@@ -449,7 +467,7 @@ export const addProductReview = async (productId: string, userId: string, data: 
 }) => {
     try {
         if (!productId || !userId) throw new ProductError("Missing IDs", apiStatusCode.BadRequest);
-        
+
         const [product, user] = await Promise.all([
             prisma.product.findFirst({ where: { id: productId } }),
             prisma.user.findFirst({ where: { id: userId } })
@@ -468,7 +486,7 @@ export const addProductReview = async (productId: string, userId: string, data: 
                 userId,
                 rating: data.rating,
                 comment: data.comment.trim(),
-                isApproved: true 
+                isApproved: true
             }
         });
 
@@ -488,8 +506,8 @@ const updateProductRating = async (productId: string) => {
     });
 
     const numReviews = reviews.length;
-    const rating = numReviews > 0 
-        ? Math.round((reviews.reduce((acc, r) => acc + r.rating, 0) / numReviews) * 10) / 10 
+    const rating = numReviews > 0
+        ? Math.round((reviews.reduce((acc, r) => acc + r.rating, 0) / numReviews) * 10) / 10
         : 0;
 
     await prisma.product.update({

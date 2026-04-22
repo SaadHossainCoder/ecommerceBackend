@@ -278,6 +278,24 @@ export const getCategoryById = async (id: string) => {
   return category;
 };
 
+export const getSubCategories = async (id: string) => {
+  if (!id) throw new CategoryError("Category ID is required", apiStatusCode.BadRequest);
+
+  const category = await prisma.category.findUnique({
+    where: { id },
+    include: {
+      subCategories: true,
+      _count: { select: { products: true } }
+    }
+  });
+
+  if (!category) {
+    throw new CategoryError("Category not found", apiStatusCode.NotFound);
+  }
+
+  return category;
+};
+
 /**
  * Get category by Slug
  */
@@ -419,6 +437,7 @@ export default {
   getAllCategories,
   getCategoryTree,
   getCategoryById,
+  getSubCategories,
   getCategoryBySlug,
   updateCategory,
   hardDeleteCategory,

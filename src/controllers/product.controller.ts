@@ -2,11 +2,48 @@ import { Response } from "express";
 import { AuthRequest } from "../types/express";
 import * as productService from "../Services/product.service";
 import { apiStatusCode } from "../lib/apiCode.lib";
+import { redisClient } from "../cache/redis.config";
+
+// Cache keys
+const CACHE_KEY_ALL = "products:all";
+const CACHE_KEY_SINGLE = (id: string) => `product:${id}`;
+const CACHE_KEY_FEATURED = (categoryId?: string) => categoryId ? `products:featured:${categoryId}` : "products:featured";
+const CACHE_KEY_FEATURED_PREFIX = "products:featured*";
+const CACHE_KEY_SEARCH = (query: string) => `products:search:${query}`;
+const CACHE_KEY_SEARCH_PREFIX = "products:search:*";
+const CACHE_KEY_SUBCATEGORY = (categoryId: string) => `products:subcategory:${categoryId}`;
+const CACHE_KEY_SUBCATEGORY_PREFIX = "products:subcategory:*";
+const CACHE_KEY_CATEGORY = (categoryId: string) => `products:category:${categoryId}`;
+const CACHE_KEY_CATEGORY_PREFIX = "products:category:*";
+const CACHE_KEY_PAGINATION_PREFIX = "products:pagination:*";
+const CACHE_KEY_PAGINATION = (page?: string, limit?: string, categoryId?: string, featured?: boolean, search?: string, sortBy?: string, showDisabled?: boolean) => `products:pagination:${page}:${limit}:${categoryId}:${featured}:${search}:${sortBy}:${showDisabled}`;
+
+// Helper to clear pattern-based caches
+const clearCachePattern = async (pattern: string) => {
+    try {
+        const keys = await redisClient.keys(pattern);
+        if (keys.length > 0) {
+            await redisClient.del(keys);
+        }
+    } catch (error) {
+        console.error("Cache clear error:", error);
+    }
+};
+
+
 
 // Create Product
 export const createProduct = async (req: AuthRequest, res: Response) => {
     try {
         const result = await productService.createProduct(req.body);
+        await Promise.all([
+            redisClient.del(CACHE_KEY_ALL),
+            clearCachePattern(CACHE_KEY_FEATURED_PREFIX),
+            clearCachePattern(CACHE_KEY_PAGINATION_PREFIX),
+            clearCachePattern(CACHE_KEY_CATEGORY_PREFIX),
+            clearCachePattern(CACHE_KEY_SUBCATEGORY_PREFIX),
+            clearCachePattern(CACHE_KEY_SEARCH_PREFIX)
+        ]);
         return res.status(result.statusCode || apiStatusCode.Created).json({
             ok: true,
             message: result.message,
@@ -25,6 +62,24 @@ export const createProduct = async (req: AuthRequest, res: Response) => {
 export const getAllProducts = async (req: AuthRequest, res: Response) => {
     try {
         const { page, limit, categoryId, featured, search, sortBy, showDisabled } = req.query;
+        const cacheKey = CACHE_KEY_PAGINATION(
+            page as string,
+            limit as string,
+            categoryId as string,
+            featured !== undefined ? featured === "true" : undefined,
+            search as string,
+            sortBy as any,
+            showDisabled === "true"
+        );
+        const cachedData = await redisClient.get(cacheKey);
+        if (cachedData) {
+            console.log("Cache hit");
+            return res.status(apiStatusCode.Success).json({
+                ok: true,
+                message: "Products fetched successfully",
+                data: JSON.parse(cachedData),
+            });
+        }
         const result = await productService.getAllProducts({
             page: page ? Number(page) : undefined,
             limit: limit ? Number(limit) : undefined,
@@ -34,7 +89,8 @@ export const getAllProducts = async (req: AuthRequest, res: Response) => {
             sortBy: sortBy as any,
             showDisabled: showDisabled === "true",
         });
-
+        await redisClient.setEx(cacheKey, 300, JSON.stringify(result));
+        console.log("Cache miss");
         return res.status(apiStatusCode.Success).json({
             ok: true,
             message: "Products fetched successfully",
@@ -52,7 +108,17 @@ export const getAllProducts = async (req: AuthRequest, res: Response) => {
 // Get Product By ID
 export const getProductById = async (req: AuthRequest, res: Response) => {
     try {
+        const cacheKey = CACHE_KEY_SINGLE(req.params.id);
+        const cachedData = await redisClient.get(cacheKey);
+        if (cachedData) {
+            return res.status(apiStatusCode.Success).json({
+                ok: true,
+                message: "Product fetched successfully",
+                data: JSON.parse(cachedData),
+            });
+        }
         const result = await productService.getProductById(req.params.id);
+        await redisClient.setEx(cacheKey, 300, JSON.stringify(result));
         return res.status(apiStatusCode.Success).json({
             ok: true,
             message: "Product fetched successfully",
@@ -70,7 +136,19 @@ export const getProductById = async (req: AuthRequest, res: Response) => {
 // Get Product By Slug
 export const getProductBySlug = async (req: AuthRequest, res: Response) => {
     try {
+        const cacheKey = CACHE_KEY_SINGLE(req.params.slug);
+        const cachedData = await redisClient.get(cacheKey);
+        if (cachedData) {
+            console.log("Cache hit");
+            return res.status(apiStatusCode.Success).json({
+                ok: true,
+                message: "Product fetched successfully",
+                data: JSON.parse(cachedData),
+            });
+        }
         const result = await productService.getProductBySlug(req.params.slug);
+        console.log("Cache miss");
+        await redisClient.setEx(cacheKey, 300, JSON.stringify(result));
         return res.status(apiStatusCode.Success).json({
             ok: true,
             message: "Product fetched successfully",
@@ -89,7 +167,19 @@ export const getProductBySlug = async (req: AuthRequest, res: Response) => {
 export const getFeaturedProducts = async (req: AuthRequest, res: Response) => {
     try {
         const limit = req.query.limit ? Number(req.query.limit) : 6;
-        const result = await productService.getFeaturedProducts(limit);
+        const categoryId = req.query.categoryId as string | undefined;
+        const cacheKey = CACHE_KEY_FEATURED(categoryId);
+        
+        const cachedData = await redisClient.get(cacheKey);
+        if (cachedData) {
+            return res.status(apiStatusCode.Success).json({
+                ok: true,
+                message: "Featured products fetched successfully",
+                data: JSON.parse(cachedData),
+            });
+        }
+        const result = await productService.getFeaturedProducts(limit, categoryId);
+        await redisClient.setEx(cacheKey, 300, JSON.stringify(result));
         return res.status(apiStatusCode.Success).json({
             ok: true,
             message: "Featured products fetched successfully",
@@ -108,10 +198,22 @@ export const getFeaturedProducts = async (req: AuthRequest, res: Response) => {
 export const searchProducts = async (req: AuthRequest, res: Response) => {
     try {
         const { query, limit } = req.query;
+        const cacheKey = CACHE_KEY_SEARCH(query as string);
+        const cachedData = await redisClient.get(cacheKey);
+        if (cachedData) {
+            return res.status(apiStatusCode.Success).json({
+                ok: true,
+                message: "Products searched successfully",
+                data: JSON.parse(cachedData),
+            });
+        }
         const result = await productService.searchProducts(
             query as string,
             limit ? Number(limit) : 20
         );
+        
+        await redisClient.setEx(cacheKey, 300, JSON.stringify(result));
+        
         return res.status(apiStatusCode.Success).json({
             ok: true,
             message: "Products searched successfully",
@@ -130,6 +232,15 @@ export const searchProducts = async (req: AuthRequest, res: Response) => {
 export const updateProduct = async (req: AuthRequest, res: Response) => {
     try {
         const result = await productService.updateProduct(req.params.id, req.body);
+        await Promise.all([
+            redisClient.del(CACHE_KEY_ALL),
+            redisClient.del(CACHE_KEY_SINGLE(req.params.id)),
+            clearCachePattern(CACHE_KEY_FEATURED_PREFIX),
+            clearCachePattern(CACHE_KEY_PAGINATION_PREFIX),
+            clearCachePattern(CACHE_KEY_CATEGORY_PREFIX),
+            clearCachePattern(CACHE_KEY_SUBCATEGORY_PREFIX),
+            clearCachePattern(CACHE_KEY_SEARCH_PREFIX)
+        ]);
         return res.status(apiStatusCode.Success).json({
             ok: true,
             message: "Product updated successfully",
@@ -148,6 +259,15 @@ export const updateProduct = async (req: AuthRequest, res: Response) => {
 export const deleteProduct = async (req: AuthRequest, res: Response) => {
     try {
         const result = await productService.deleteProduct(req.params.id);
+        await Promise.all([
+            redisClient.del(CACHE_KEY_ALL),
+            redisClient.del(CACHE_KEY_SINGLE(req.params.id)),
+            clearCachePattern(CACHE_KEY_FEATURED_PREFIX),
+            clearCachePattern(CACHE_KEY_PAGINATION_PREFIX),
+            clearCachePattern(CACHE_KEY_CATEGORY_PREFIX),
+            clearCachePattern(CACHE_KEY_SUBCATEGORY_PREFIX),
+            clearCachePattern(CACHE_KEY_SEARCH_PREFIX)
+        ]);
         return res.status(apiStatusCode.Success).json({
             ok: true,
             ...result,
