@@ -10,8 +10,8 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
-    "@arcjet/inspect": "^1.0.0-beta.15",
-    "@arcjet/node": "^1.0.0-beta.15",
+    "@arcjet/inspect": "^1.4.0",
+    "@arcjet/node": "^1.4.0",
     "@prisma/client": "^6.19.1",
     "@types/bcrypt": "^6.0.0",
     "@types/jsonwebtoken": "^9.0.10",

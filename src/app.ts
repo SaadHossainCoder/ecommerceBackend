@@ -2,7 +2,6 @@ import express from "express";
 import cors from "cors";
 import helmet from "helmet";
 import hpp from "hpp";
-// import { aj } from "./config/arcjet";
 import { rateLimit } from "express-rate-limit";
 import { errorHandler } from "./middleware/error-handler.middleware";
 import cookieParser from 'cookie-parser';
@@ -71,36 +70,9 @@ app.use((req, res, next) => {
 });
 
 // ======================================================
-// 5. 🤖 Arcjet — AI Security Layer Middleware
-// ======================================================
-// Protect Any Route
-// app.use(async (req, res, next) => {
-//     const decision = await aj.protect(req, { requested: 1, userId: "anonymous" });
-
-//     if (decision.isDenied()) {
-//         return res.status(apiStatusCode.ServiceUnavailable).json({ error: "Rate limit exceeded" });
-//     }
-//     next();
-// });
-
-// ======================================================
 // 5. 🚀  Route
 // ======================================================
 app.use("/api", rootRouter);
-
-
-// ======================================================
-// 6. 📜 logger Handler
-// ======================================================
-// app.use((req, res, next) => {
-//     const start = Date.now();
-//     res.on('finish', () => {
-//         const duration = Date.now() - start;
-//         logger.http(`${req.method} ${req.url} ${res.statusCode} - ${duration}ms`, { ip: req.ip });
-//     });
-//     next();
-// });
-
 
 // ======================================================
 // 6. 🔥 Global Error Handler

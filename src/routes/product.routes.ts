@@ -9,6 +9,7 @@ const productRouter = Router();
 // ====================== PUBLIC ROUTES ======================
 productRouter.get("/", productController.getAllProducts);
 productRouter.get("/featured", productController.getFeaturedProducts);
+productRouter.get("/featured/:slug", productController.getFeaturedProductsBySlug);
 productRouter.get("/search", productController.searchProducts);
 productRouter.get("/slug/:slug", productController.getProductBySlug);
 

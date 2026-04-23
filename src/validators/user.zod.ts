@@ -61,6 +61,10 @@ export const updateUserSchema = z.object({
     body: z.object({
         username: z.string().min(3, "Username must be at least 3 characters").max(30, "Username must be at most 30 characters").toLowerCase().optional(),
         email: z.string().email("Invalid email format").toLowerCase().optional(),
+        phoneNumber: z.string().optional(),
+        countryCode: z.string().optional(),
+        gender: z.enum(["male", "female", "other", "MALE", "FEMALE", "OTHER", ""]).transform((val) => val.toUpperCase()).optional(),
+        dateOfBirth: z.string().optional(),
         role: z.enum(["user", "admin", "USER", "ADMIN"]).transform((val) => val.toUpperCase()).optional(),
         isBlocked: z.boolean().optional(),
         lockedUntil: z.string().datetime().optional().nullable(),

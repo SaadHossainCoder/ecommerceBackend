@@ -4,7 +4,7 @@ import { getForgotPasswordEmail, getOtpEmail, getVerificationEmail, getForgotPas
 import { signAccessToken, verifyAccessToken } from "../utils/token.utils";
 import { apiStatusCode } from "../lib/apiCode.lib";
 import prisma from "../prisma/client";
-import logger from "../lib/logger";
+// import logger from "../lib/logger";
 import { Role } from "@prisma/client";
 
 // Custom errors
@@ -44,7 +44,16 @@ export const signup = async (username: string, email: string, password: string, 
                     password: passwordHash.trim(),
                     role: role.toUpperCase() as Role,
                 },
-                select: { id: true, username: true, email: true, role: true },
+                select: { 
+                    id: true, 
+                    username: true, 
+                    email: true, 
+                    role: true,
+                    phoneNumber: true,
+                    countryCode: true,
+                    gender: true,
+                    dateOfBirth: true
+                },
             });
         });
 
@@ -79,11 +88,11 @@ export const signup = async (username: string, email: string, password: string, 
             });
         });
 
-        logger.info("User signed up, OTP sent and refresh token created", { userId: user.id, role });
+        // logger.info("User signed up, OTP sent and refresh token created", { userId: user.id, role });
         return { user };
     } catch (error: any) {
         // Log the error for debugging
-        logger.error("Signup failed", { email: normalizedEmail, error: (error as Error).message });
+        // logger.error("Signup failed", { email: normalizedEmail, error: (error as Error).message });
         if (error?.message) {
             console.error("Signup service error:", error.message);
         } else {
@@ -122,7 +131,7 @@ export const login = async (email: string, password: string) => {
         if (!user || !isPasswordValid) throw new AuthError("Invalid email or password", apiStatusCode.Unauthorized, "INVALID_CREDENTIALS");
 
         if (user.isBlocked) {
-            logger.warn("Login attempt by blocked user", { userId: user.id });
+            // logger.warn("Login attempt by blocked user", { userId: user.id });
             throw new AuthError("Your account has been blocked. Please contact support.", apiStatusCode.NotMatched, "USER_BLOCKED");
         }
 
@@ -157,10 +166,10 @@ export const login = async (email: string, password: string) => {
          // access token
         const accessToken = signAccessToken({ id: user.id, users: user.username, role: user.role });
 
-        logger.info("User logged in", { userId: user.id });
+        // logger.info("User logged in", { userId: user.id });
         return { user, accessToken, refreshToken: refreshPlain };
     } catch (error: any) {
-        logger.error("Login failed", { email, error: error.message });
+        // logger.error("Login failed", { email, error: error.message });
         if (!(error instanceof AuthError)) {
             console.error("Login service error:", error);
         }
@@ -194,15 +203,15 @@ export const logout = async (userId: string, refreshToken: string) => {
             data: { revoked: true }
         });
         
-        logger.info("User logged out", { userId, tokenId: result.id });
+        // logger.info("User logged out", { userId, tokenId: result.id });
         return true;
     } catch (error) {
         if (error instanceof AuthError) {
-            logger.warn("Logout failed", { userId, error: (error as Error).message });
+            // logger.warn("Logout failed", { userId, error: (error as Error).message });
             throw error;
         }
         console.error("Logout service error:", error);
-        logger.error("Logout service error:", error);
+        // logger.error("Logout service error:", error);
         throw new AuthError("Failed to logout", apiStatusCode.BadRequest);
     }
 };
@@ -234,7 +243,7 @@ export const refreshTokens = async (refreshToken: string) => {
                 where: { id: found.id },
                 data: { revoked: true }
             });
-            logger.warn("Token refresh attempt by blocked user", { userId: user.id });
+            // logger.warn("Token refresh attempt by blocked user", { userId: user.id });
             throw new Error("Your account has been blocked");
         }
 
@@ -489,6 +498,10 @@ export const getAllUsers = async () => {
                     id: true,
                     username: true,
                     email: true,
+                    phoneNumber: true,
+                    countryCode: true,
+                    gender: true,
+                    dateOfBirth: true,
                     role: true,
                     isEmailVerified: true,
                     isBlocked: true,
@@ -514,6 +527,10 @@ export const getUserById = async (userId: string) => {
                 id: true,
                 username: true,
                 email: true,
+                phoneNumber: true,
+                countryCode: true,
+                gender: true,
+                dateOfBirth: true,
                 role: true,
                 isEmailVerified: true,
                 isBlocked: true,
@@ -547,6 +564,10 @@ export const updateUserById = async (userId: string, adminId: string, data: any)
         if (data.isBlocked !== undefined) updatePayload.isBlocked = data.isBlocked;
         if (data.lockedUntil !== undefined) updatePayload.lockedUntil = data.lockedUntil;
         if (data.role !== undefined) updatePayload.role = data.role;
+        if (data.phoneNumber !== undefined) updatePayload.phoneNumber = data.phoneNumber;
+        if (data.countryCode !== undefined) updatePayload.countryCode = data.countryCode;
+        if (data.gender !== undefined) updatePayload.gender = data.gender;
+        if (data.dateOfBirth !== undefined) updatePayload.dateOfBirth = data.dateOfBirth;
 
         return await prisma.user.update({
             where: { id: userId },
@@ -570,10 +591,28 @@ export const updateMe = async (userId: string, data: any) => {
         const updatePayload: any = {};
         if (data.username !== undefined) updatePayload.username = data.username;
         if (data.email !== undefined) updatePayload.email = data.email;
-
+        if (data.phoneNumber !== undefined) updatePayload.phoneNumber = data.phoneNumber;
+        if (data.countryCode !== undefined) updatePayload.countryCode = data.countryCode;
+        if (data.gender !== undefined) updatePayload.gender = data.gender;
+        if (data.dateOfBirth !== undefined) updatePayload.dateOfBirth = data.dateOfBirth;
         return await prisma.user.update({
             where: { id: userId },
             data: updatePayload,
+            select: {
+                id: true,
+                username: true,
+                email: true,
+                phoneNumber: true,
+                countryCode: true,
+                gender: true,
+                dateOfBirth: true,
+                role: true,
+                isEmailVerified: true,
+                isBlocked: true,
+                lockedUntil: true,
+                createdAt: true,
+                updatedAt: true,
+            },
         });
     } catch (error) {
         console.error("Update me service error:", error);

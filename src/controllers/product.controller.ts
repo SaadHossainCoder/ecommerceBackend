@@ -7,7 +7,7 @@ import { redisClient } from "../cache/redis.config";
 // Cache keys
 const CACHE_KEY_ALL = "products:all";
 const CACHE_KEY_SINGLE = (id: string) => `product:${id}`;
-const CACHE_KEY_FEATURED = (categoryId?: string) => categoryId ? `products:featured:${categoryId}` : "products:featured";
+const CACHE_KEY_FEATURED = (categoryId?: string, limit?: number) => `products:featured:${categoryId || "all"}:${limit}`;
 const CACHE_KEY_FEATURED_PREFIX = "products:featured*";
 const CACHE_KEY_SEARCH = (query: string) => `products:search:${query}`;
 const CACHE_KEY_SEARCH_PREFIX = "products:search:*";
@@ -171,20 +171,41 @@ export const getProductBySlug = async (req: AuthRequest, res: Response) => {
 // Get Featured Products
 export const getFeaturedProducts = async (req: AuthRequest, res: Response) => {
     try {
-        const limit = req.query.limit ? Number(req.query.limit) : 6;
+        const limit = req.query.limit ? Number(req.query.limit) : undefined;
         const categoryId = req.query.categoryId as string | undefined;
-        const cacheKey = CACHE_KEY_FEATURED(categoryId);
 
+        const cacheKey = CACHE_KEY_FEATURED(categoryId, limit);
         const cachedData = await redisClient.get(cacheKey);
         if (cachedData) {
+            console.log("Cache hit");
             return res.status(apiStatusCode.Success).json({
                 ok: true,
                 message: "Featured products fetched successfully",
                 data: JSON.parse(cachedData),
             });
         }
+        console.log("Cache miss");
         const result = await productService.getFeaturedProducts(limit, categoryId);
         await redisClient.setEx(cacheKey, 300, JSON.stringify(result));
+        return res.status(apiStatusCode.Success).json({
+            ok: true,
+            message: "Featured products fetched successfully",
+            data: result,
+        });
+    } catch (error: any) {
+        const statusCode = error.statusCode || apiStatusCode.InternalServerError;
+        return res.status(statusCode).json({
+            ok: false,
+            message: error.message || "Failed to fetch featured products",
+        });
+    }
+};
+
+export const getFeaturedProductsBySlug = async (req: AuthRequest, res: Response) => {
+    try {
+        const slug = req.params.slug;
+        const limit = req.query.limit ? Number(req.query.limit) : undefined;
+        const result = await productService.getFeaturedProductsBySlug(slug, limit);
         return res.status(apiStatusCode.Success).json({
             ok: true,
             message: "Featured products fetched successfully",

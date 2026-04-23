@@ -13,7 +13,16 @@ export const signup = async (req: AuthRequest, res: Response) => {
         };
         const { user } = await authService.signup(username, email, password, role);
 
-        return res.status(apiStatusCode.Created).json({ ok: true, user: { id: user.id, username: user.username, email: user.email, role: user.role } });
+        return res.status(apiStatusCode.Created).json({ ok: true, user: { 
+            id: user.id, 
+            username: user.username, 
+            email: user.email, 
+            role: user.role,
+            phoneNumber: user.phoneNumber || null,
+            countryCode: user.countryCode || null,
+            gender: user.gender || null,
+            dateOfBirth: user.dateOfBirth || null
+        } });
     } catch (error: any) {
         const message = error?.message || "An error occurred during signup";
         return res.status(apiStatusCode.BadRequest).json({ ok: false, message });
@@ -47,7 +56,16 @@ export const login = async (req: AuthRequest, res: Response) => {
                 httpOnly: true, secure: process.env.NODE_ENV === "production", sameSite: "lax", path: "/", maxAge: 30 * 60 * 1000
             });
 
-        return res.status(apiStatusCode.Success).json({ ok: true, user: { id: user.id, username: user.username, email: user.email, role: user.role } });
+        return res.status(apiStatusCode.Success).json({ ok: true, user: { 
+            id: user.id, 
+            username: user.username, 
+            email: user.email, 
+            role: user.role,
+            phoneNumber: user.phoneNumber || null,
+            countryCode: user.countryCode || null,
+            gender: user.gender || null,
+            dateOfBirth: user.dateOfBirth || null
+        } });
     } catch (error) {
         return res.status(apiStatusCode.BadRequest).json({ ok: false, message: (error as Error).message });
     }

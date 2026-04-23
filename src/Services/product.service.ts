@@ -238,16 +238,16 @@ export const getAllProducts = async (options: ProductFilterOptions = {}) => {
 /**
  * Get featured products
  */
-export const getFeaturedProducts = async (limit: number = 6, categoryId?: string) => {
+export const getFeaturedProducts = async (limit?: number, categoryId?: string) => {
     try {
         return await prisma.product.findMany({
             where: {
                 featured: true,
                 disableProduct: false,
-                ...(categoryId && { categoryId })
+                ...(categoryId ? { categoryId } : {})
             },
+            ...(limit && { take: limit }),
             orderBy: { createdAt: "desc" },
-            take: limit,
             include: {
                 category: { select: { id: true, name: true, slug: true, parentCategory: { select: { id: true, name: true, slug: true } } } },
                 vendor: { select: { id: true, name: true } }
@@ -257,6 +257,27 @@ export const getFeaturedProducts = async (limit: number = 6, categoryId?: string
         throw new ProductError(error?.message || "Failed to fetch featured products");
     }
 };
+
+export const getFeaturedProductsBySlug = async (slug: string, limit?: number) => {
+    try {
+        return await prisma.product.findMany({
+            where: {
+                featured: true,
+                disableProduct: false,
+                category: { slug }
+            },
+            ...(limit && { take: limit }),
+            orderBy: { createdAt: "desc" },
+            include: {
+                category: { select: { id: true, name: true, slug: true, parentCategory: { select: { id: true, name: true, slug: true } } } },
+                vendor: { select: { id: true, name: true } }
+            }
+        });
+    } catch (error: any) {
+        throw new ProductError(error?.message || "Failed to fetch featured products");
+    }
+};
+
 
 /**
  * Search products

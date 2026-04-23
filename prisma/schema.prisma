@@ -18,6 +18,10 @@ model User {
   username        String    @unique
   email           String    @unique
   password        String
+  phoneNumber     String?
+  countryCode     String?
+  gender          String?
+  dateOfBirth     String?
   role            Role      @default(USER)
   isEmailVerified Boolean   @default(false)
   isBlocked       Boolean   @default(false)
