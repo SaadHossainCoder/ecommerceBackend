@@ -7,7 +7,9 @@ import { redisClient } from "../cache/redis.config";
 // Cache keys
 const CACHE_KEY_ALL = "products:all";
 const CACHE_KEY_SINGLE = (id: string) => `product:${id}`;
-const CACHE_KEY_FEATURED = (categoryId?: string, limit?: number) => `products:featured:${categoryId || "all"}:${limit}`;
+const CACHE_KEY_FEATURED = (categoryId?: string, limit?: number) => {
+    return `products:featured:${categoryId || "all"}${limit ? `:${limit}` : ""}`;
+};
 const CACHE_KEY_FEATURED_PREFIX = "products:featured*";
 const CACHE_KEY_SEARCH = (query: string) => `products:search:${query}`;
 const CACHE_KEY_SEARCH_PREFIX = "products:search:*";
@@ -16,7 +18,17 @@ const CACHE_KEY_SUBCATEGORY_PREFIX = "products:subcategory:*";
 const CACHE_KEY_CATEGORY = (categoryId: string) => `products:category:${categoryId}`;
 const CACHE_KEY_CATEGORY_PREFIX = "products:category:*";
 const CACHE_KEY_PAGINATION_PREFIX = "products:pagination:*";
-const CACHE_KEY_PAGINATION = (page?: string, limit?: string, categoryId?: string, featured?: boolean, search?: string, sortBy?: string, showDisabled?: boolean) => `products:pagination:${page}:${limit}:${categoryId}:${featured}:${search}:${sortBy}:${showDisabled}`;
+const CACHE_KEY_PAGINATION = (page?: string, limit?: string, categoryId?: string, featured?: boolean, search?: string, sortBy?: string, showDisabled?: boolean) => {
+    const parts = ["products", "pagination"];
+    if (page) parts.push(`page:${page}`);
+    if (limit) parts.push(`limit:${limit}`);
+    if (categoryId) parts.push(`cat:${categoryId}`);
+    if (featured !== undefined) parts.push(`feat:${featured}`);
+    if (search) parts.push(`search:${search}`);
+    if (sortBy) parts.push(`sort:${sortBy}`);
+    if (showDisabled) parts.push(`dis:${showDisabled}`);
+    return parts.join(":");
+};
 
 //review cache keys
 const CACHE_KEY_REVIEW = (productId: string) => `product:review:${productId}`;
@@ -110,6 +122,27 @@ export const getAllProducts = async (req: AuthRequest, res: Response) => {
     }
 };
 
+export const getAllProductsByAdmin = async (req: AuthRequest, res: Response) => {
+    try {
+        const { page, limit } = req.query;
+        const result = await productService.getAllProductsByAdmin({
+            page: page ? Number(page) : undefined,
+            limit: limit ? Number(limit) : undefined,
+        });
+        return res.status(apiStatusCode.Success).json({
+            ok: true,
+            message: "Products fetched successfully",
+            data: result,
+        });
+    } catch (error: any) {
+        const statusCode = error.statusCode || apiStatusCode.InternalServerError;
+        return res.status(statusCode).json({
+            ok: false,
+            message: error.message || "Failed to fetch products",
+        });
+    }
+};
+
 // Get Product By ID
 export const getProductById = async (req: AuthRequest, res: Response) => {
     try {
@@ -153,7 +186,7 @@ export const getProductBySlug = async (req: AuthRequest, res: Response) => {
         }
         const result = await productService.getProductBySlug(req.params.slug);
         console.log("Cache miss");
-        await redisClient.setEx(cacheKey, 300, JSON.stringify(result));
+        await redisClient.setEx(cacheKey, 200, JSON.stringify(result));
         return res.status(apiStatusCode.Success).json({
             ok: true,
             message: "Product fetched successfully",
@@ -186,7 +219,7 @@ export const getFeaturedProducts = async (req: AuthRequest, res: Response) => {
         }
         console.log("Cache miss");
         const result = await productService.getFeaturedProducts(limit, categoryId);
-        await redisClient.setEx(cacheKey, 300, JSON.stringify(result));
+        await redisClient.setEx(cacheKey, 3600, JSON.stringify(result));
         return res.status(apiStatusCode.Success).json({
             ok: true,
             message: "Featured products fetched successfully",

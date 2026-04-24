@@ -106,7 +106,7 @@ export const createProduct = async (data: {
                 longDescription: data.longDescription?.trim() || "",
                 vendorId: data.vendorId,
                 sku,
-                categoryId: data.categoryId,
+                categoryId: data.subcategory || data.categoryId,
                 featured: data.featured || false,
                 discount: data.discount || 0,
                 generalImages: processImages(data.generalImages),
@@ -205,10 +205,20 @@ export const getAllProducts = async (options: ProductFilterOptions = {}) => {
                 orderBy,
                 skip,
                 take: limit,
-                include: {
-                    category: { select: { id: true, name: true, slug: true, parentCategory: { select: { id: true, name: true, slug: true } } } },
-                    vendor: { select: { id: true, name: true } },
-                    _count: { select: { productReviews: { where: { isApproved: true } } } }
+                select: {
+                    id: true,
+                    title: true,
+                    slug: true,
+                    subProducts: {
+                        select: {
+                            sku: true,
+                            type: true,
+                            qty: true,
+                            price: true,
+                            images: true
+                        }
+                    },
+                    category: { select: { id: true, name: true, slug: true } }
                 }
             }),
             prisma.product.count({ where })
@@ -235,6 +245,90 @@ export const getAllProducts = async (options: ProductFilterOptions = {}) => {
     }
 };
 
+//admin get all products
+export const getAllProductsByAdmin = async (options: ProductFilterOptions = {}) => {
+    try {
+        const page = Math.max(1, Number(options.page) || 1);
+        const limit = Math.min(100, Math.max(1, Number(options.limit) || 10));
+        const skip = (page - 1) * limit;
+
+        const where: Prisma.ProductWhereInput = {
+            ...(options.categoryId && { categoryId: options.categoryId }),
+            ...(options.vendorId && { vendorId: options.vendorId }),
+            ...(options.featured !== undefined && {
+                featured: options.featured === "true" || options.featured === true
+            }),
+            ...(options.isAvailable !== undefined && {
+                productIsAvailable: options.isAvailable === "true" || options.isAvailable === true
+            }),
+            ...(options.search && {
+                OR: [
+                    { title: { contains: options.search, mode: "insensitive" } },
+                    { description: { contains: options.search, mode: "insensitive" } },
+                    { sku: { contains: options.search, mode: "insensitive" } },
+                ]
+            }),
+            ...(options.showDisabled !== "true" && options.showDisabled !== true && { disableProduct: false })
+        };
+
+        if (options.minPrice || options.maxPrice) {
+            where.subProducts = {
+                some: {
+                    price: {
+                        ...(options.minPrice && { gte: Number(options.minPrice) }),
+                        ...(options.maxPrice && { lte: Number(options.maxPrice) }),
+                    }
+                }
+            };
+        }
+
+        let orderBy: Prisma.ProductOrderByWithRelationInput = { createdAt: "desc" };
+
+        switch (options.sortBy) {
+            case "oldest": orderBy = { createdAt: "asc" }; break;
+            case "rating": orderBy = { rating: "desc" }; break;
+            case "sold": orderBy = { sold: "desc" }; break;
+            case "discount": orderBy = { discount: "desc" }; break;
+            case "price_asc": orderBy = { subProducts: { _count: "asc" } as any }; break;
+            case "price_desc": orderBy = { subProducts: { _count: "desc" } as any }; break;
+            case "newest": default: orderBy = { createdAt: "desc" };
+        }
+
+        const [products, total] = await Promise.all([
+            prisma.product.findMany({
+                where,
+                orderBy,
+                skip,
+                take: limit,
+                include: {
+                    category: { select: { id: true, name: true, slug: true, parentCategory: { select: { id: true, name: true, slug: true } } } },
+                    vendor: { select: { id: true, name: true } },
+                }
+            }),
+            prisma.product.count({ where })
+        ]);
+        if (!products) {
+            throw new ProductError("Products not found", apiStatusCode.NotFound, "NOT_FOUND");
+        }
+        return {
+            data: products,
+            message: "Products fetched successfully",
+            statusCode: apiStatusCode.Success,
+            pagination: {
+                total,
+                page,
+                limit,
+                pages: Math.ceil(total / limit),
+                hasNext: page < Math.ceil(total / limit),
+                hasPrev: page > 1
+            }
+        };
+    } catch (error: any) {
+        console.error("Get all products error:", error);
+        throw new ProductError(error?.message || "Failed to fetch products");
+    }
+}
+
 /**
  * Get featured products
  */
@@ -248,10 +342,21 @@ export const getFeaturedProducts = async (limit?: number, categoryId?: string) =
             },
             ...(limit && { take: limit }),
             orderBy: { createdAt: "desc" },
-            include: {
-                category: { select: { id: true, name: true, slug: true, parentCategory: { select: { id: true, name: true, slug: true } } } },
-                vendor: { select: { id: true, name: true } }
-            }
+            select: {
+                    id: true,
+                    title: true,
+                    slug: true,
+                    subProducts: {
+                        select: {
+                            sku: true,
+                            type: true,
+                            qty: true,
+                            price: true,
+                            images: true
+                        }
+                    },
+                    category: { select: { id: true, name: true, slug: true } }
+                }
         });
     } catch (error: any) {
         throw new ProductError(error?.message || "Failed to fetch featured products");
@@ -264,14 +369,27 @@ export const getFeaturedProductsBySlug = async (slug: string, limit?: number) =>
             where: {
                 featured: true,
                 disableProduct: false,
-                category: { slug }
+                category: {
+                    slug
+                }
             },
             ...(limit && { take: limit }),
             orderBy: { createdAt: "desc" },
-            include: {
-                category: { select: { id: true, name: true, slug: true, parentCategory: { select: { id: true, name: true, slug: true } } } },
-                vendor: { select: { id: true, name: true } }
-            }
+            select: {
+                    id: true,
+                    title: true,
+                    slug: true,
+                    subProducts: {
+                        select: {
+                            sku: true,
+                            type: true,
+                            qty: true,
+                            price: true,
+                            images: true
+                        }
+                    },
+                    category: { select: { id: true, name: true, slug: true } }
+                }
         });
     } catch (error: any) {
         throw new ProductError(error?.message || "Failed to fetch featured products");
@@ -298,9 +416,10 @@ export const searchProducts = async (query: string, limit: number = 20) => {
                 disableProduct: false
             },
             take: limit,
-            include: {
-                category: { select: { id: true, name: true } },
-                vendor: { select: { id: true, name: true } }
+            select: {
+                id: true,
+                title: true,
+                slug: true
             }
         });
     } catch (error: any) {
@@ -323,8 +442,7 @@ export const getProductById = async (id: string) => {
                     id: true,
                     name: true,
                     slug: true,
-                    parentCategory: { select: { id: true, name: true, slug: true } },
-                    subCategories: { select: { id: true, name: true, slug: true } }
+                    subCategories: { select: { id: true, name: true, slug: true, products: { select: { id: true, slug: true, title: true, subProducts: true } } } }
                 }
             },
             vendor: { select: { id: true, name: true } },
@@ -352,9 +470,22 @@ export const getProductBySlug = async (slug: string) => {
         include: {
             category: {
                 select: {
-                    id: true, name: true, slug: true,
-                    parentCategory: { select: { id: true, name: true, slug: true } },
-                    subCategories: { select: { id: true, name: true, slug: true } }
+                    id: true,
+                    parentCategory: {
+                        select: {
+                            id: true,
+                            subCategories: {
+                                select: {
+                                    id: true,
+                                    name: true,
+                                    slug: true,
+                                    products: {
+                                        select: { id: true, slug: true, title: true, subProducts: true}
+                                    }
+                                }
+                            }
+                        }
+                    }
                 }
             },
             vendor: { select: { id: true, name: true } },
@@ -367,7 +498,49 @@ export const getProductBySlug = async (slug: string) => {
     });
 
     if (!product) throw new ProductError("Product not found", apiStatusCode.NotFound);
-    return product;
+
+    // ── Fetch related products (same subcategory/category) in the same API call ──
+    const ingredients = product.ingredients as any;
+    const subcategoryId = product.category?.parentCategory
+        ? product.categoryId                          // product is already in a subcategory
+        : ingredients?.subcategory || null;            // fallback to ingredients.subcategory
+    const parentCategoryId = product.category?.parentCategory?.id || product.categoryId;
+
+    let relatedProducts: any[] = [];
+
+    // Try subcategory first
+    if (subcategoryId) {
+        relatedProducts = await prisma.product.findMany({
+            where: { categoryId: subcategoryId, slug: { not: slug } },
+            select: {
+                id: true, title: true, slug: true, discount: true,
+                generalImages: true, subProducts: true,
+                category: { select: { id: true, name: true, slug: true } }
+            },
+            take: 8
+        });
+    }
+
+    // If not enough, supplement from parent category
+    if (relatedProducts.length < 4 && parentCategoryId && parentCategoryId !== subcategoryId) {
+        const existingIds = relatedProducts.map(p => p.id);
+        const parentProducts = await prisma.product.findMany({
+            where: {
+                categoryId: parentCategoryId,
+                slug: { not: slug },
+                id: { notIn: existingIds }
+            },
+            select: {
+                id: true, title: true, slug: true, discount: true,
+                generalImages: true, subProducts: true,
+                category: { select: { id: true, name: true, slug: true } }
+            },
+            take: 8 - relatedProducts.length
+        });
+        relatedProducts = [...relatedProducts, ...parentProducts];
+    }
+
+    return { ...product, relatedProducts };
 };
 
 // ====================== UPDATE OPERATIONS ======================
@@ -410,7 +583,7 @@ export const updateProduct = async (id: string, data: Partial<{
             ...(data.description && { description: data.description.trim() }),
             ...(data.longDescription && { longDescription: data.longDescription.trim() }),
             ...(data.vendorId && { vendorId: data.vendorId }),
-            ...(data.categoryId && { categoryId: data.categoryId }),
+            ...((data.subcategory || data.categoryId) && { categoryId: data.subcategory || data.categoryId }),
             ...(data.featured !== undefined && { featured: data.featured }),
             ...(data.productIsAvailable !== undefined && { productIsAvailable: data.productIsAvailable }),
             ...(data.discount !== undefined && { discount: Math.max(0, Math.min(100, data.discount)) }),
@@ -453,7 +626,6 @@ export const updateProduct = async (id: string, data: Partial<{
         return await prisma.product.update({
             where: { id },
             data: updateData,
-            include: { category: { select: { id: true, name: true } } }
         });
     } catch (error: any) {
         if (error instanceof ProductError) throw error;

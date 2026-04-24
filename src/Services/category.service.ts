@@ -25,6 +25,7 @@ export class CategoryError extends Error {
 }
 
 // ================= UTILS =================
+const isValidObjectId = (id: string): boolean => /^[a-f0-9]{24}$/i.test(id);
 const normalizeName = (value: string): string => value?.trim() || "";
 
 const normalizeSlug = (value: string): string =>
@@ -261,6 +262,7 @@ export const getCategoryTree = async () => {
  */
 export const getCategoryById = async (id: string) => {
   if (!id) throw new CategoryError("Category ID is required", apiStatusCode.BadRequest);
+  if (!isValidObjectId(id)) throw new CategoryError("Invalid category ID format", apiStatusCode.BadRequest);
 
   const category = await prisma.category.findUnique({
     where: { id },
@@ -280,11 +282,14 @@ export const getCategoryById = async (id: string) => {
 
 export const getSubCategories = async (id: string) => {
   if (!id) throw new CategoryError("Category ID is required", apiStatusCode.BadRequest);
+  if (!isValidObjectId(id)) throw new CategoryError("Invalid category ID format", apiStatusCode.BadRequest);
 
   const category = await prisma.category.findUnique({
     where: { id },
     include: {
       subCategories: true,
+      parentCategory: true,
+      products: true,
       _count: { select: { products: true } }
     }
   });

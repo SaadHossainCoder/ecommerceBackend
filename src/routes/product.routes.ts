@@ -15,6 +15,7 @@ productRouter.get("/slug/:slug", productController.getProductBySlug);
 
 // ====================== ADMIN ROUTES ======================
 productRouter.get("/reviews", authGuard(["ADMIN"]), productController.getAllReviews);
+productRouter.get("/admin", authGuard(["ADMIN"]), productController.getAllProductsByAdmin);
 productRouter.post("/", authGuard(["ADMIN"]), validateZod(productZod.createProductSchema), productController.createProduct);
 productRouter.put("/review/:reviewId", authGuard(["ADMIN"]), productController.updateReview);
 productRouter.delete("/review/:reviewId", authGuard(["ADMIN"]), productController.deleteReview);

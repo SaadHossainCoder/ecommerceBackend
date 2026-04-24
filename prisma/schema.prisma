@@ -184,6 +184,8 @@ model Category {
   @@map("categories")
 }
 
+
+
 model ProductReview {
   id         String  @id @default(auto()) @map("_id") @db.ObjectId
   rating     Float   @default(0)
