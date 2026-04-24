@@ -224,6 +224,34 @@ export const getCategoryTree = async (req: Request, res: Response) => {
     }
 };
 
+//get short Data
+export const getCategoryTreeShortData = async (req: Request, res: Response) => {
+    try {
+        // Try to get from cache
+        const cachedData = await redisClient.get(CACHE_KEY_TREE);
+        if (cachedData) {
+            console.log("hit cache");
+            return res.status(apiStatusCode.Success).json({
+                ok: true,
+                message: "Category tree fetched successfully",
+                data: JSON.parse(cachedData)
+            });
+        }
+        console.log("miss cache");
+        const tree = await categoryService.getCategoryTreeShortData();
+        // Save to cache
+        await redisClient.setEx(CACHE_KEY_TREE, 3600, JSON.stringify(tree));
+        return res.status(apiStatusCode.Success).json({
+            ok: true,
+            message: "Category tree fetched successfully",
+            data: tree
+        });
+    } catch (error: any) {
+        const statusCode = error.statusCode || apiStatusCode.InternalServerError;
+        return res.status(statusCode).json({ ok: false, message: error.message });
+    }
+};
+
 // Get Category Statistics
 export const getCategoryStatistics = async (req: Request, res: Response) => {
     try {

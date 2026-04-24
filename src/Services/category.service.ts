@@ -257,6 +257,48 @@ export const getCategoryTree = async () => {
   }
 };
 
+//get short Data
+export const getCategoryTreeShortData = async () => {
+  try {
+    const categories = await prisma.category.findMany({
+      select: {
+        id: true,
+        name: true,
+        slug: true,
+        parentCategoryId: true,
+      },
+      orderBy: { name: "asc" }
+    });
+
+    const categoryMap = new Map<string, any>();
+    const tree: any[] = [];
+
+    // Initialize map
+    categories.forEach(cat => {
+      categoryMap.set(cat.id, { ...cat, subCategories: [] });
+    });
+
+    // Build forest (multiple root trees)
+    categoryMap.forEach(cat => {
+      if (cat.parentCategoryId && cat.parentCategoryId !== cat.id) {
+        const parent = categoryMap.get(cat.parentCategoryId);
+        if (parent) {
+          parent.subCategories.push(cat);
+        } else {
+          tree.push(cat);
+        }
+      } else {
+        tree.push(cat);
+      }
+    });
+
+    return tree;
+  } catch (error: any) {
+    console.error("Tree building error:", error.message);
+    throw new CategoryError(error.message || "Failed to build category tree");
+  }
+};
+
 /**
  * Get single category by ID
  */
@@ -446,6 +488,7 @@ export default {
   getCategoryBySlug,
   updateCategory,
   hardDeleteCategory,
-  getCategoryStatistics
+  getCategoryStatistics,
+  getCategoryTreeShortData
 };
 

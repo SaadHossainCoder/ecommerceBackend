@@ -9,6 +9,7 @@ const router = Router();
 // ✅ PUBLIC
 router.get("/", categoryController.getAllCategories);
 router.get("/tree", categoryController.getCategoryTree);
+router.get("/tree-short-data", categoryController.getCategoryTreeShortData);
 router.get("/slug/:slug", categoryController.getCategoryBySlug);
 
 // ✅ ADMIN

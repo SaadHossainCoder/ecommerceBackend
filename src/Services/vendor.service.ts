@@ -76,6 +76,27 @@ export const getVendors = async () => {
     };
 };
 
+export const getVendorByShotData = async () => {
+    try {
+        const vendors = await prisma.vendor.findMany({
+            select: {
+                id: true,
+                name: true,
+                slug: true,
+            }
+        });
+        return {
+            message: "Vendors fetched successfully",
+            data: vendors,
+            statusCode: apiStatusCode.Success
+        };
+    } catch (error) {
+        if (error instanceof VendorError) throw error;
+        console.error("Get vendors error:", error);
+        throw new VendorError("Failed to get vendors", apiStatusCode.InternalServerError);
+    };
+};
+
 //get vendor by id
 export const getVendorById = async (id: string) => {
     try {

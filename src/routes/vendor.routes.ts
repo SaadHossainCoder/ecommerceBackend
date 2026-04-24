@@ -8,6 +8,7 @@ const vendorRouter = Router();
 
 // Public routes
 vendorRouter.get("/", vendorController.getAllVendors);
+vendorRouter.get("/short-data", vendorController.getVendorByShortData);
 vendorRouter.get("/:id", vendorController.getVendorById);
 
 // Admin routes

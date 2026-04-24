@@ -8,10 +8,45 @@ import { redisClient } from "../cache/redis.config";
 const CACHE_KEY_ALL = "vendors:all";
 const CACHE_KEY_SINGLE = (id: string) => `vendor:${id}`;
 
+
 // Create Vendor
 export const createVendor = async (req: Request, res: Response) => {
     try {
         const result = await vendorService.createVendor(req.body);
+        // Invalidate cache
+        await Promise.all([
+            redisClient.del(CACHE_KEY_ALL),  
+        ]);
+        return res.status(result.statusCode).json({
+            ok: true,
+            message: result.message,
+            data: result.data
+        });
+
+    } catch (error: any) {
+        const statusCode = error.statusCode || apiStatusCode.InternalServerError;
+        return res.status(statusCode).json({
+            ok: false,
+            message: error.message || "Failed to create vendor"
+        });
+    }
+};
+
+export const getVendorByShortData = async (req: Request, res: Response) => {
+    try {
+         const cachedData = await redisClient.get(CACHE_KEY_ALL);
+        if (cachedData) {
+            return res.status(apiStatusCode.Success).json({
+                ok: true,
+                message: "Fetched from cache",
+                data: JSON.parse(cachedData)
+            });
+        }
+        const result = await vendorService.getVendorByShotData();
+
+        if (result.data) {
+            await redisClient.setEx(CACHE_KEY_ALL, 3600, JSON.stringify(result.data));
+        }
         return res.status(result.statusCode).json({
             ok: true,
             message: result.message,
@@ -21,7 +56,7 @@ export const createVendor = async (req: Request, res: Response) => {
         const statusCode = error.statusCode || apiStatusCode.InternalServerError;
         return res.status(statusCode).json({
             ok: false,
-            message: error.message || "Failed to create vendor"
+            message: error.message || "Failed to get vendor by short data"
         });
     }
 };
