@@ -7,7 +7,7 @@ import { authGuard } from "../middleware/auth.guard";
 const addressRouter = Router();
 
 // All address routes require at least 'USER' role
-addressRouter.use(authGuard(['USER']));
+addressRouter.use(authGuard(['USER', 'ADMIN', 'MODERATOR']));
 
 addressRouter.get("/", addressController.getAddressesByUser);
 addressRouter.get("/:id", addressController.getAddressById);

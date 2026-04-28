@@ -10,9 +10,9 @@ const reviewRouter = Router();
 reviewRouter.get("/product/:id", reviewController.getReviewsByProduct);
 
 // Authenticated User routes
-reviewRouter.get("/me", authGuard(['USER']), reviewController.getReviewsByUser);
-reviewRouter.post("/product/:id", authGuard(['USER']), validateZod(reviewZod.createReviewSchema), reviewController.createReview);
-reviewRouter.delete("/:id", authGuard(['USER']), reviewController.deleteReview);
+reviewRouter.get("/me", authGuard(['USER', 'ADMIN', 'MODERATOR']), reviewController.getReviewsByUser);
+reviewRouter.post("/product/:id", authGuard(['USER', 'ADMIN', 'MODERATOR']), validateZod(reviewZod.createReviewSchema), reviewController.createReview);
+reviewRouter.delete("/:id", authGuard(['USER', 'ADMIN', 'MODERATOR']), reviewController.deleteReview);
 
 // Admin routes
 reviewRouter.get("/admin/all", authGuard(['ADMIN']), validateZod(reviewZod.reviewQuerySchema), reviewController.getAllReviews);

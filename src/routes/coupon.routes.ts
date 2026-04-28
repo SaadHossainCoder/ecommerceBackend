@@ -7,7 +7,7 @@ import { authGuard } from "../middleware/auth.guard";
 const couponRouter = Router();
 
 // User routes
-couponRouter.post("/validate", authGuard(['USER']), validateZod(couponZod.validateCouponSchema), couponController.validateCoupon);
+couponRouter.post("/validate", authGuard(['USER', 'ADMIN', 'MODERATOR']), validateZod(couponZod.validateCouponSchema), couponController.validateCoupon);
 
 // Admin routes
 couponRouter.get("/admin/stats", authGuard(['ADMIN']), couponController.getCouponStats);

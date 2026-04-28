@@ -77,24 +77,27 @@ export const getVendors = async () => {
 };
 
 export const getVendorByShotData = async () => {
-    try {
-        const vendors = await prisma.vendor.findMany({
-            select: {
-                id: true,
-                name: true,
-                slug: true,
-            }
-        });
-        return {
-            message: "Vendors fetched successfully",
-            data: vendors,
-            statusCode: apiStatusCode.Success
-        };
-    } catch (error) {
-        if (error instanceof VendorError) throw error;
-        console.error("Get vendors error:", error);
-        throw new VendorError("Failed to get vendors", apiStatusCode.InternalServerError);
-    };
+            try {
+                const vendors = await prisma.vendor.findMany({
+                    select: {
+                        id: true,
+                        name: true,
+                        slug: true,
+                        images: true,
+                        description: true,
+                        vendorProductType: true
+                    }
+                });
+                return {
+                    message: "Vendors fetched successfully",
+                    data: vendors,
+                    statusCode: apiStatusCode.Success
+                };
+            } catch (error) {
+                if (error instanceof VendorError) throw error;
+                console.error("Get vendors error:", error);
+                throw new VendorError("Failed to get vendors", apiStatusCode.InternalServerError);
+            };
 };
 
 //get vendor by id
@@ -111,6 +114,37 @@ export const getVendorById = async (id: string) => {
         });
 
         // Bugfix: Handle null when ID is not found
+        if (!vendor) {
+            throw new VendorError("Vendor not found", apiStatusCode.NotFound);
+        };
+
+        return {
+            message: "Vendor fetched successfully",
+            data: vendor,
+            statusCode: apiStatusCode.Success
+        };
+
+    } catch (error) {
+        if (error instanceof VendorError) throw error;
+        console.error("Get vendor error:", error);
+        throw new VendorError("Failed to get vendor", apiStatusCode.InternalServerError);
+    };
+};
+
+//get vendor by slug
+export const getVendorBySlug = async (slug: string) => {
+    try {
+        // validate the slug
+        if (!slug) {
+            throw new VendorError("Slug is required", apiStatusCode.BadRequest);
+        };
+
+        //get the vendor
+        const vendor = await prisma.vendor.findUnique({
+            where: { slug }
+        });
+
+        // Bugfix: Handle null when slug is not found
         if (!vendor) {
             throw new VendorError("Vendor not found", apiStatusCode.NotFound);
         };

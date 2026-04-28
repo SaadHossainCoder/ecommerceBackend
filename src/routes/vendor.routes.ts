@@ -10,6 +10,7 @@ const vendorRouter = Router();
 vendorRouter.get("/", vendorController.getAllVendors);
 vendorRouter.get("/short-data", vendorController.getVendorByShortData);
 vendorRouter.get("/:id", vendorController.getVendorById);
+vendorRouter.get("/slug/:slug", vendorController.getVendorBySlug);
 
 // Admin routes
 vendorRouter.post("/", authGuard(['ADMIN']), validateZod(vendorZod.createVendorSchema), vendorController.createVendor);
