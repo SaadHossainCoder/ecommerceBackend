@@ -58,7 +58,7 @@ export const getAllCategories = async (req: Request, res: Response) => {
         // Try to get from cache
         const cachedData = await redisClient.get(CACHE_KEY_ALL);
         if (cachedData) {
-            console.log("hit cache");
+            // console.log("hit cache");
             return res.status(apiStatusCode.Success).json({
                 ok: true,
                 message: "Categories fetched successfully",
@@ -94,14 +94,14 @@ export const getCategoryById = async (req: Request, res: Response) => {
         // Try to get from cache
         const cachedData = await redisClient.get(CACHE_KEY_SINGLE(id));
         if (cachedData) {
-            console.log("hit cache");
+            // console.log("hit cache");
             return res.status(apiStatusCode.Success).json({
                 ok: true,
                 message: "Category fetched successfully",
                 data: JSON.parse(cachedData)
             });
         }
-        console.log("miss cache");
+        // console.log("miss cache");
         const category = await categoryService.getCategoryById(id);
         // Save to cache
         await redisClient.setEx(CACHE_KEY_SINGLE(id), 300, JSON.stringify(category));
@@ -124,14 +124,14 @@ export const getCategoryBySlug = async (req: Request, res: Response) => {
         // Try to get from cache
         const cachedData = await redisClient.get(CACHE_KEY_SINGLE(slug));
         if (cachedData) {
-            console.log("hit cache");
+            // console.log("hit cache");
             return res.status(apiStatusCode.Success).json({
                 ok: true,
                 message: "Category fetched successfully",
                 data: JSON.parse(cachedData)
             });
         }
-        console.log("miss cache");
+        // console.log("miss cache");
         const category = await categoryService.getCategoryBySlug(slug);
         // Save to cache
         await redisClient.setEx(CACHE_KEY_SINGLE(slug), 300, JSON.stringify(category));
@@ -152,14 +152,14 @@ export const getSubCategories = async (req: Request, res: Response) => {
         // Try to get from cache
         const cachedData = await redisClient.get(CACHE_KEY_SINGLE(id));
         if (cachedData) {
-            console.log("hit cache");
+            // console.log("hit cache");
             return res.status(apiStatusCode.Success).json({
                 ok: true,
                 message: "Category fetched successfully",
                 data: JSON.parse(cachedData)
             });
         }
-        console.log("miss cache");
+        // console.log("miss cache");
         const category = await categoryService.getSubCategories(id);
         // Save to cache
         await redisClient.setEx(CACHE_KEY_SINGLE(id), 300, JSON.stringify(category));
@@ -202,14 +202,14 @@ export const getCategoryTree = async (req: Request, res: Response) => {
         // Try to get from cache
         const cachedData = await redisClient.get(CACHE_KEY_TREE);
         if (cachedData) {
-            console.log("hit cache");
+            // console.log("hit cache");
             return res.status(apiStatusCode.Success).json({
                 ok: true,
                 message: "Category tree fetched successfully",
                 data: JSON.parse(cachedData)
             });
         }
-        console.log("miss cache");
+        // console.log("miss cache");
         const tree = await categoryService.getCategoryTree();
         // Save to cache
         await redisClient.setEx(CACHE_KEY_TREE, 3600, JSON.stringify(tree));
@@ -230,14 +230,14 @@ export const getCategoryTreeShortData = async (req: Request, res: Response) => {
         // Try to get from cache
         const cachedData = await redisClient.get(CACHE_KEY_TREE);
         if (cachedData) {
-            console.log("hit cache");
+            // console.log("hit cache");
             return res.status(apiStatusCode.Success).json({
                 ok: true,
                 message: "Category tree fetched successfully",
                 data: JSON.parse(cachedData)
             });
         }
-        console.log("miss cache");
+        // console.log("miss cache");
         const tree = await categoryService.getCategoryTreeShortData();
         // Save to cache
         await redisClient.setEx(CACHE_KEY_TREE, 3600, JSON.stringify(tree));
@@ -258,14 +258,14 @@ export const getCategoryStatistics = async (req: Request, res: Response) => {
         // Try to get from cache
         const cachedData = await redisClient.get(CACHE_KEY_STATS);
         if (cachedData) {
-            console.log("hit cache");
+            // console.log("hit cache");
             return res.status(apiStatusCode.Success).json({
                 ok: true,
                 message: "Category statistics fetched successfully",
                 data: JSON.parse(cachedData)
             });
         }
-        console.log("miss cache");
+        // console.log("miss cache");
         const stats = await categoryService.getCategoryStatistics();
         // Save to cache
         await redisClient.setEx(CACHE_KEY_STATS, 3600, JSON.stringify(stats));

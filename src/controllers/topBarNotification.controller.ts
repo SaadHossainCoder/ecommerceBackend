@@ -55,14 +55,14 @@ export const getAllTopBarNotifications = async (req: AuthRequest, res: Response)
         // Try to get from cache
         const cachedData = await redisClient.get(CACHE_KEY_ALL);
         if (cachedData) {
-            console.log("hit cache");
+            // console.log("hit cache");
             return res.status(apiStatusCode.Success).json({
                 ok: true,
                 message: "Fetched from cache",
                 data: JSON.parse(cachedData)
             });
         }
-        console.log("hit database");
+        // console.log("hit database");
         const result = await topBarNotificationService.getTopBarNotifications();
         
         // Save to cache

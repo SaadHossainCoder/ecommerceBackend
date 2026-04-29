@@ -12,7 +12,7 @@ const port = process.env.PORT || 5000;
 
 app.get("/", detectBotProtection, (req, res) => {
     res.send("Hello from the secure server!");
-    console.log("Response sent");
+    // console.log("Response sent");
 });
 
 app.listen(port, () => {

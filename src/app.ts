@@ -60,14 +60,14 @@ app.use(limiter);
 // ======================================================
 // 4. 📜 logger Handler (Moved up to capture all requests)
 // ======================================================
-app.use((req, res, next) => {
-    const start = Date.now();
-    res.on('finish', () => {
-        const duration = Date.now() - start;
-        logger.http(`${req.method} ${req.url} ${res.statusCode} - ${duration}ms`, { ip: req.ip });
-    });
-    next();
-});
+// app.use((req, res, next) => {
+//     const start = Date.now();
+//     res.on('finish', () => {
+//         const duration = Date.now() - start;
+//         logger.http(`${req.method} ${req.url} ${res.statusCode} - ${duration}ms`, { ip: req.ip });
+//     });
+//     next();
+// });
 
 // ======================================================
 // 5. 🚀  Route

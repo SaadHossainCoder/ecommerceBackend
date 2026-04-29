@@ -90,7 +90,7 @@ export const getAllProducts = async (req: AuthRequest, res: Response) => {
         );
         const cachedData = await redisClient.get(cacheKey);
         if (cachedData) {
-            console.log("Cache hit");
+            // console.log("Cache hit");
             return res.status(apiStatusCode.Success).json({
                 ok: true,
                 message: "Products fetched successfully",
@@ -107,7 +107,7 @@ export const getAllProducts = async (req: AuthRequest, res: Response) => {
             showDisabled: showDisabled === "true",
         });
         await redisClient.setEx(cacheKey, 300, JSON.stringify(result));
-        console.log("Cache miss");
+        // console.log("Cache miss");
         return res.status(apiStatusCode.Success).json({
             ok: true,
             message: "Products fetched successfully",
@@ -177,7 +177,7 @@ export const getProductBySlug = async (req: AuthRequest, res: Response) => {
         const cacheKey = CACHE_KEY_SINGLE(req.params.slug);
         const cachedData = await redisClient.get(cacheKey);
         if (cachedData) {
-            console.log("Cache hit");
+            // console.log("Cache hit");
             return res.status(apiStatusCode.Success).json({
                 ok: true,
                 message: "Product fetched successfully",
@@ -185,7 +185,7 @@ export const getProductBySlug = async (req: AuthRequest, res: Response) => {
             });
         }
         const result = await productService.getProductBySlug(req.params.slug);
-        console.log("Cache miss");
+        // console.log("Cache miss");
         await redisClient.setEx(cacheKey, 200, JSON.stringify(result));
         return res.status(apiStatusCode.Success).json({
             ok: true,
@@ -210,14 +210,14 @@ export const getFeaturedProducts = async (req: AuthRequest, res: Response) => {
         const cacheKey = CACHE_KEY_FEATURED(categoryId, limit);
         const cachedData = await redisClient.get(cacheKey);
         if (cachedData) {
-            console.log("Cache hit");
+            // console.log("Cache hit");
             return res.status(apiStatusCode.Success).json({
                 ok: true,
                 message: "Featured products fetched successfully",
                 data: JSON.parse(cachedData),
             });
         }
-        console.log("Cache miss");
+        // console.log("Cache miss");
         const result = await productService.getFeaturedProducts(limit, categoryId);
         await redisClient.setEx(cacheKey, 3600, JSON.stringify(result));
         return res.status(apiStatusCode.Success).json({

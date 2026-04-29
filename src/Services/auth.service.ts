@@ -114,7 +114,7 @@ export const login = async (email: string, password: string) => {
     if (!email || !password) throw new AuthError("Email and password are required", apiStatusCode.BadRequest);
     const normalizedEmail = email.toLowerCase();
     try {
-        console.log(email, password);
+        // console.log(email, password);
 
         const user = await prisma.user.findFirst({
             where: {
@@ -126,7 +126,7 @@ export const login = async (email: string, password: string) => {
         // To prevent user enumeration, we check for user existence and password validity
         // in a way that doesn't reveal which one failed.
         const isPasswordValid = user ? await verifyPassword(password, user.password) : false;
-        console.log("isPasswordValid", isPasswordValid);
+        // console.log("isPasswordValid", isPasswordValid);
         // console.log("user", user);
         if (!user || !isPasswordValid) throw new AuthError("Invalid email or password", apiStatusCode.Unauthorized, "INVALID_CREDENTIALS");
 

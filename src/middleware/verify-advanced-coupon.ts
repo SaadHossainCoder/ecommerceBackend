@@ -2,7 +2,7 @@ import * as CouponService from "../Services/coupon.service";
 import prisma from "../prisma/client";
 
 async function verify() {
-    console.log("🚀 Starting Advanced Coupon Service Verification...");
+    // console.log("🚀 Starting Advanced Coupon Service Verification...");
 
     const testCategoryCode = `CATCOP${Math.floor(Math.random() * 10000)}`;
     const testProductCode = `PRDCOP${Math.floor(Math.random() * 10000)}`;
@@ -28,17 +28,17 @@ async function verify() {
             categoryId: dummyCatId
         });
         catCouponId = catRes.data.id;
-        console.log("✅ Category Coupon Created");
+        // console.log("✅ Category Coupon Created");
 
         // 2. Validate Category Coupon
-        console.log("\n2. Testing validateCoupon (Category scope)...");
+        // console.log("\n2. Testing validateCoupon (Category scope)...");
         const items = [
             { productId: "p1", categoryId: dummyCatId, price: 100, quantity: 2 }, // Applicable: 200
             { productId: "p2", categoryId: "other", price: 50, quantity: 1 }      // Not applicable
         ];
         const valCatRes = await CouponService.validateCoupon(testCategoryCode, dummyUserId, 250, items);
         console.log("✅ Validation Success. Message:", valCatRes.message);
-        console.log("📊 Computed Discount:", valCatRes.data.computedDiscount); 
+        // console.log("📊 Computed Discount:", valCatRes.data.computedDiscount); 
         
         if (valCatRes.data.computedDiscount !== 40) {
             console.error("❌ Expected 40 discount, got", valCatRes.data.computedDiscount);
@@ -61,14 +61,14 @@ async function verify() {
         console.log("✅ Product Coupon Created");
 
         // 4. Validate Product Coupon
-        console.log("\n4. Testing validateCoupon (Product scope)...");
+        // console.log("\n4. Testing validateCoupon (Product scope)...");
         const items2 = [
             { productId: dummyPrdId, categoryId: "c1", price: 100, quantity: 1 }, // Applicable: 100
             { productId: "p2", categoryId: "c1", price: 50, quantity: 1 }         // Not applicable
         ];
         const valPrdRes = await CouponService.validateCoupon(testProductCode, dummyUserId, 150, items2);
         console.log("✅ Validation Success. Message:", valPrdRes.message);
-        console.log("📊 Computed Discount:", valPrdRes.data.computedDiscount);
+        // console.log("📊 Computed Discount:", valPrdRes.data.computedDiscount);
         
         if (valPrdRes.data.computedDiscount !== 15) {
             console.error("❌ Expected 15 discount, got", valPrdRes.data.computedDiscount);

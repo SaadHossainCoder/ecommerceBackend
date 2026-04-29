@@ -35,14 +35,14 @@ export const getAllBanners = async (req: Request, res: Response) => {
         // Try to get from cache
         const cachedData = await redisClient.get(CACHE_KEY_ALL);
         if (cachedData) {
-            console.log("hit cache");
+            // console.log("hit cache");
             return res.status(apiStatusCode.Success).json({
                 ok: true,
                 message: "Fetched from cache",
                 data: JSON.parse(cachedData)
             });
         }
-        console.log("miss cache");
+        // console.log("miss cache");
         const result = await bannerService.getBanners();
 
         // Save to cache
