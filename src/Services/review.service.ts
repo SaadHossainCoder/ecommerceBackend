@@ -126,7 +126,10 @@ export const getReviewsByUser = async (userId: string) => {
             where: { userId },
             include: {
                 product: {
-                    select: { id: true, title: true, slug: true, images: true }
+                    select: {
+                        id: true, title: true, slug: true,
+                        // images: true
+                    }
                 }
             },
             orderBy: { createdAt: "desc" }

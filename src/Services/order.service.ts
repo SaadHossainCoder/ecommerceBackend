@@ -77,7 +77,7 @@ export const getOrders = async (query: any) => {
                             product: {
                                 select: {
                                     title: true,
-                                    images: true
+                                    // images: true
                                 }
                             }
                         }
