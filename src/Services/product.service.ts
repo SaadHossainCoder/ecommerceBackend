@@ -27,6 +27,7 @@ export interface ProductFilterOptions {
     isAvailable?: boolean | string;
     vendorId?: string;
     showDisabled?: boolean | string;
+    disableProduct?: boolean | string;
 }
 
 // ====================== CREATE OPERATIONS ======================
@@ -268,7 +269,9 @@ export const getAllProductsByAdmin = async (options: ProductFilterOptions = {}) 
                     { sku: { contains: options.search, mode: "insensitive" } },
                 ]
             }),
-            ...(options.showDisabled !== "true" && options.showDisabled !== true && { disableProduct: false })
+            // ...(options.disableProduct !== undefined ? {
+            //     disableProduct: options.disableProduct === "true" || options.disableProduct === true
+            // } : (options.showDisabled !== "true" && options.showDisabled !== true && { disableProduct: false }))
         };
 
         if (options.minPrice || options.maxPrice) {
@@ -343,20 +346,20 @@ export const getFeaturedProducts = async (limit?: number, categoryId?: string) =
             ...(limit && { take: limit }),
             orderBy: { createdAt: "desc" },
             select: {
-                    id: true,
-                    title: true,
-                    slug: true,
-                    subProducts: {
-                        select: {
-                            sku: true,
-                            type: true,
-                            qty: true,
-                            price: true,
-                            images: true
-                        }
-                    },
-                    category: { select: { id: true, name: true, slug: true } }
-                }
+                id: true,
+                title: true,
+                slug: true,
+                subProducts: {
+                    select: {
+                        sku: true,
+                        type: true,
+                        qty: true,
+                        price: true,
+                        images: true
+                    }
+                },
+                category: { select: { id: true, name: true, slug: true } }
+            }
         });
     } catch (error: any) {
         throw new ProductError(error?.message || "Failed to fetch featured products");
@@ -376,20 +379,20 @@ export const getFeaturedProductsBySlug = async (slug: string, limit?: number) =>
             ...(limit && { take: limit }),
             orderBy: { createdAt: "desc" },
             select: {
-                    id: true,
-                    title: true,
-                    slug: true,
-                    subProducts: {
-                        select: {
-                            sku: true,
-                            type: true,
-                            qty: true,
-                            price: true,
-                            images: true
-                        }
-                    },
-                    category: { select: { id: true, name: true, slug: true } }
-                }
+                id: true,
+                title: true,
+                slug: true,
+                subProducts: {
+                    select: {
+                        sku: true,
+                        type: true,
+                        qty: true,
+                        price: true,
+                        images: true
+                    }
+                },
+                category: { select: { id: true, name: true, slug: true } }
+            }
         });
     } catch (error: any) {
         throw new ProductError(error?.message || "Failed to fetch featured products");
@@ -480,7 +483,7 @@ export const getProductBySlug = async (slug: string) => {
                                     name: true,
                                     slug: true,
                                     products: {
-                                        select: { id: true, slug: true, title: true, subProducts: true}
+                                        select: { id: true, slug: true, title: true, subProducts: true }
                                     }
                                 }
                             }

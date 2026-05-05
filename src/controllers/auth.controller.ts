@@ -47,13 +47,21 @@ export const login = async (req: AuthRequest, res: Response) => {
         res.cookie(
             CONFIG.REFRESH_COOKIE_NAME, refreshToken,
             {
-                httpOnly: true, secure: process.env.NODE_ENV === "production", sameSite: "lax", path: "/", maxAge: 30 * 24 * 60 * 60 * 1000
+                httpOnly: true,
+                secure: process.env.NODE_ENV === "production",
+                sameSite: process.env.NODE_ENV === "production" ? "none" : "lax", // "none" required for cross-site (Render + Vercel)
+                path: "/",
+                maxAge: 30 * 24 * 60 * 60 * 1000
             });
 
         res.cookie(
             "accessToken", accessToken,
             {
-                httpOnly: true, secure: process.env.NODE_ENV === "production", sameSite: "lax", path: "/", maxAge: 30 * 60 * 1000
+                httpOnly: true,
+                secure: process.env.NODE_ENV === "production",
+                sameSite: process.env.NODE_ENV === "production" ? "none" : "lax", // "none" required for cross-site (Render + Vercel)
+                path: "/",
+                maxAge: 30 * 60 * 1000
             });
 
         return res.status(apiStatusCode.Success).json({ ok: true, user: { 
@@ -81,13 +89,13 @@ export const logout = async (req: AuthRequest, res: Response) => {
         res.clearCookie(CONFIG.REFRESH_COOKIE_NAME, {
             httpOnly: true,
             secure: process.env.NODE_ENV === "production",
-            sameSite: "lax",
+            sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
             path: "/"
         });
         res.clearCookie("accessToken", {
             httpOnly: true,
             secure: process.env.NODE_ENV === "production",
-            sameSite: "lax",
+            sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
             path: "/"
         });
 
@@ -127,7 +135,9 @@ export const refresh = async (req: AuthRequest, res: Response) => {
             CONFIG.REFRESH_COOKIE_NAME, refreshToken,
             {
                 httpOnly: true,
-                secure: CONFIG.NODE_ENV === "production", sameSite: "lax", path: "/",
+                secure: CONFIG.NODE_ENV === "production",
+                sameSite: CONFIG.NODE_ENV === "production" ? "none" : "lax", // "none" required for cross-site (Render + Vercel)
+                path: "/",
                 maxAge: 30 * 24 * 60 * 60 * 1000
             }
         );
@@ -135,7 +145,9 @@ export const refresh = async (req: AuthRequest, res: Response) => {
             "accessToken", accessToken,
             {
                 httpOnly: true,
-                secure: CONFIG.NODE_ENV === "production", sameSite: "lax", path: "/",
+                secure: CONFIG.NODE_ENV === "production",
+                sameSite: CONFIG.NODE_ENV === "production" ? "none" : "lax", // "none" required for cross-site (Render + Vercel)
+                path: "/",
                 maxAge: 30 * 60 * 1000
             }
         );

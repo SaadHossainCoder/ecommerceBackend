@@ -58,9 +58,21 @@ export const createAddress = async (userId: string, data: {
 
         const address = await prisma.address.create({
             data: {
-                ...data,
+                name: data.name,
+                phone: data.phone,
+                email: data.email,
+                street: data.street,
+                city: data.city,
+                state: data.state,
+                postalCode: data.postalCode,
+                country: data.country,
+                label: data.label,
+                addressType: data.addressType,
+                friendName: data.friendName,
+                friendPhone: data.friendPhone,
+                giftDescription: data.giftDescription,
+                isDefault: isDefault,
                 user: { connect: { id: userId } },
-                isDefault
             }
         });
 
@@ -81,7 +93,7 @@ export const createAddress = async (userId: string, data: {
 export const getAddressesByUser = async (userId: string) => {
     try {
         const addresses = await prisma.address.findMany({
-            where: { userId, deletedAt: null },
+            where: { userId, deletedAt: null },    // ✅ exclude soft-deleted addresses
             orderBy: [{ isDefault: "desc" }, { createdAt: "desc" }]
         });
         return {
@@ -93,6 +105,7 @@ export const getAddressesByUser = async (userId: string) => {
         throw new AddressError("Failed to fetch addresses", apiStatusCode.InternalServerError);
     }
 };
+
 
 export const getAddressById = async (addressId: string, userId: string) => {
     try {
@@ -134,7 +147,21 @@ export const updateAddress = async (addressId: string, userId: string, data: Par
 
         const updated = await prisma.address.update({
             where: { id: addressId },
-            data: data
+            data: {
+                name: data.name,
+                phone: data.phone,
+                email: data.email,
+                street: data.street,
+                city: data.city,
+                state: data.state,
+                postalCode: data.postalCode,
+                country: data.country,
+                label: data.label,
+                addressType: data.addressType,
+                friendName: data.friendName,
+                friendPhone: data.friendPhone,
+                giftDescription: data.giftDescription,
+            }
         });
 
         return {

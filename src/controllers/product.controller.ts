@@ -352,6 +352,16 @@ export const addReview = async (req: AuthRequest, res: Response) => {
         }
 
         const result = await productService.addProductReview(req.params.id, userId, req.body);
+        await Promise.all([
+            redisClient.del(CACHE_KEY_SINGLE(req.params.id)),
+            clearCachePattern(CACHE_KEY_REVIEW_PREFIX),
+            clearCachePattern(CACHE_KEY_ALL),
+            clearCachePattern(CACHE_KEY_FEATURED_PREFIX),
+            clearCachePattern(CACHE_KEY_PAGINATION_PREFIX),
+            clearCachePattern(CACHE_KEY_CATEGORY_PREFIX),
+            clearCachePattern(CACHE_KEY_SUBCATEGORY_PREFIX),
+            clearCachePattern(CACHE_KEY_SEARCH_PREFIX)
+        ]);
         return res.status(apiStatusCode.Created).json({
             ok: true,
             message: "Review added successfully",
@@ -449,8 +459,13 @@ export const deleteReview = async (req: AuthRequest, res: Response) => {
     try {
         const result = await productService.deleteReview(req.params.reviewId);
         await Promise.all([
-            redisClient.del(CACHE_KEY_REVIEW(req.params.reviewId)),
             clearCachePattern(CACHE_KEY_REVIEW_PREFIX),
+            clearCachePattern(CACHE_KEY_ALL),
+            clearCachePattern(CACHE_KEY_FEATURED_PREFIX),
+            clearCachePattern(CACHE_KEY_PAGINATION_PREFIX),
+            clearCachePattern(CACHE_KEY_CATEGORY_PREFIX),
+            clearCachePattern(CACHE_KEY_SUBCATEGORY_PREFIX),
+            clearCachePattern(CACHE_KEY_SEARCH_PREFIX)
         ]);
         return res.status(apiStatusCode.Success).json({
             ok: true,

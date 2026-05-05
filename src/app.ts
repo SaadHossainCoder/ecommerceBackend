@@ -21,6 +21,28 @@ app.use(cors({
     credentials: true,
 }));
 
+// const allowedOrigins: string[] = [
+//     "http://localhost:3000",
+//     "http://localhost:3001",
+// ];
+// if (process.env.FRONTEND_URL && process.env.FRONTEND_URL !== "*") {
+//     process.env.FRONTEND_URL.split(",").forEach((url) => {
+//         const trimmed = url.trim();
+//         if (trimmed) allowedOrigins.push(trimmed);
+//     });
+// }
+
+// app.use(cors({
+//     origin: (origin, callback) => {
+//         // Allow requests with no origin (Postman, curl, server-to-server)
+//         if (!origin) return callback(null, true);
+//         if (allowedOrigins.includes(origin)) return callback(null, true);
+//         callback(new Error(`CORS: Origin '${origin}' not allowed`));
+//     },
+//     methods: ["GET", "POST", "PUT", "PATCH", "DELETE"],
+//     credentials: true,              // Required for cookies to work cross-site
+// }));
+
 
 
 // ======================================================
@@ -46,13 +68,17 @@ app.use(helmet());
 // Prevent HTTP parameter pollution
 app.use(hpp());
 
-// Rate limiter (global, tweak for important routes)
+// ─────────────────────────────────────────────────────────────────────────────
+// Global "outer wall" limiter — catches everything before it hits any route.
+// Route-level limiters (rateLimiter.middleware.ts) are the precise inner layer.
+// Two-layer strategy: global catches floods, per-route catches targeted abuse.
+// ─────────────────────────────────────────────────────────────────────────────
 const limiter = rateLimit({
-    windowMs: 15 * 60 * 1000, // 15 mins
-    max: 200, // change for production
+    windowMs: 15 * 60 * 1000,                                          // 15 min window
+    max: process.env.NODE_ENV === "production" ? 100 : 500,            // 100 in prod, 500 in dev
     standardHeaders: true,
     legacyHeaders: false,
-    message: { message: "Too many requests from this IP, please try later." }
+    message: { ok: false, message: "Too many requests from this IP, please try again later." }
 });
 app.use(limiter);
 
@@ -60,14 +86,14 @@ app.use(limiter);
 // ======================================================
 // 4. 📜 logger Handler (Moved up to capture all requests)
 // ======================================================
-// app.use((req, res, next) => {
-//     const start = Date.now();
-//     res.on('finish', () => {
-//         const duration = Date.now() - start;
-//         logger.http(`${req.method} ${req.url} ${res.statusCode} - ${duration}ms`, { ip: req.ip });
-//     });
-//     next();
-// });
+app.use((req, res, next) => {
+    const start = Date.now();
+    res.on('finish', () => {
+        const duration = Date.now() - start;
+        logger.http(`${req.method} ${req.url} ${res.statusCode} - ${duration}ms`, { ip: req.ip });
+    });
+    next();
+});
 
 // ======================================================
 // 5. 🚀  Route

@@ -135,8 +135,6 @@ export const login = async (email: string, password: string) => {
             throw new AuthError("Your account has been blocked. Please contact support.", apiStatusCode.NotMatched, "USER_BLOCKED");
         }
 
-       
-
         // create refresh token
         if (!user.id) throw new AuthError("User ID is required", apiStatusCode.InternalServerError);
         const refreshPlain = randomTokenHex(64);

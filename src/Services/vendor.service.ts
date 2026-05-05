@@ -110,7 +110,8 @@ export const getVendorById = async (id: string) => {
 
         //get the vendor
         const vendor = await prisma.vendor.findUnique({
-            where: { id }
+            where: { id },
+            include: { products: true }
         });
 
         // Bugfix: Handle null when ID is not found
@@ -141,7 +142,8 @@ export const getVendorBySlug = async (slug: string) => {
 
         //get the vendor
         const vendor = await prisma.vendor.findUnique({
-            where: { slug }
+            where: { slug },
+            include: { products: true }
         });
 
         // Bugfix: Handle null when slug is not found

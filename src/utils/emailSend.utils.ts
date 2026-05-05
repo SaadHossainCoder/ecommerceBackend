@@ -20,6 +20,18 @@ const transporter = nodemailer.createTransport({
     pass: process.env.SMTP_PASS,
   },
 });
+// const transporter = nodemailer.createTransport({
+//   host: process.env.SMTP_HOST,       // smtp.gmail.com
+  // port: Number(process.env.SMTP_PORT), // 465
+  // secure: Number(process.env.SMTP_PORT) === 465, // true for port 465 (SSL)
+  // auth: {
+  //   user: process.env.SMTP_USER,
+  //   pass: process.env.SMTP_PASS,       // Gmail App Password (NOT your real password)
+  // },
+  // tls: {
+  //   rejectUnauthorized: false,         // Required for Render's outbound connections
+  // },
+// });
 
 // 🔍 Verify transporter once (startup check)
 export const verifyEmailConfig = async () => {

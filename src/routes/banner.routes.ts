@@ -3,16 +3,17 @@ import * as bannerController from "../controllers/banner.controller";
 import { validateZod } from "../middleware/validate-zod.middleware";
 import * as bannerZod from "../validators/banner.zod";
 import { authGuard } from "../middleware/auth.guard";
+import { publicReadLimiter, adminWriteLimiter } from "../middleware/rateLimiter.middleware";
 
 const bannerRouter = Router();
 
-// Public routes
-bannerRouter.get("/", bannerController.getAllBanners);
-bannerRouter.get("/:id", bannerController.getBannerById);
+// ====================== PUBLIC ROUTES ======================
+bannerRouter.get("/",    publicReadLimiter, bannerController.getAllBanners);
+bannerRouter.get("/:id", publicReadLimiter, bannerController.getBannerById);
 
-// Admin routes
-bannerRouter.post("/", authGuard(['ADMIN']), validateZod(bannerZod.createBannerSchema), bannerController.createBanner);
-bannerRouter.put("/:id", authGuard(['ADMIN']), validateZod(bannerZod.updateBannerSchema), bannerController.updateBanner);
-bannerRouter.delete("/:id", authGuard(['ADMIN']), bannerController.deleteBanner);
+// ====================== ADMIN ROUTES ======================
+bannerRouter.post("/",    authGuard(['ADMIN']), adminWriteLimiter, validateZod(bannerZod.createBannerSchema), bannerController.createBanner);
+bannerRouter.put("/:id",  authGuard(['ADMIN']), adminWriteLimiter, validateZod(bannerZod.updateBannerSchema), bannerController.updateBanner);
+bannerRouter.delete("/:id", authGuard(['ADMIN']), adminWriteLimiter,                                          bannerController.deleteBanner);
 
 export default bannerRouter;
