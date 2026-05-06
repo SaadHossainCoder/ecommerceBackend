@@ -12,7 +12,7 @@ export const CONFIG = {
     // REDIS_URL: process.env.REDIS_URL!,
 };
 
-export function assertEnv(){
+export function assertEnv() {
     const missingVars = [];
     for (const [key, value] of Object.entries(CONFIG)) {
         if (!value) {
@@ -20,6 +20,6 @@ export function assertEnv(){
         }
     }
     if (missingVars.length > 0) {
-        throw new Error(`Missing environment variables: ${missingVars.join(", ")}`);   
+        throw new Error(`Missing environment variables: ${missingVars.join(", ")}`);
     }
 }
