@@ -20,6 +20,6 @@ export function assertEnv(){
         }
     }
     if (missingVars.length > 0) {
-        throw new Error(`Missing environment variables: ${missingVars.join(", ")}`);
+        throw new Error(`Missing environment variables: ${missingVars.join(", ")}`);   
     }
 }
