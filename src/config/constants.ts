@@ -1,5 +1,6 @@
 
 export const CONFIG = {
+    DATABASE_URL: process.env.DATABASE_URL!,
     REFRESH_COOKIE_NAME: process.env.REFRESH_COOKIE_NAME || "jid",
     ACCESS_TOKEN_EXPIRES: process.env.ACCESS_TOKEN_EXPIRES || "30m",
     JWT_SECRET: process.env.JWT_SECRET!,

@@ -15,33 +15,43 @@ const app = express();
 // ----------------------
 // 🌐 1. CORS
 // ----------------------
+// app.use(cors({
+//     origin: ["http://localhost:3000", ],
+//     methods: ["GET", "POST", "PUT", "PATCH", "DELETE"],
+//     credentials: true,
+// }));
+
+// ✅ FIXED: Parse FRONTEND_URL correctly
+const getAllowedOrigins = () => {
+    const allowed = [
+        "http://localhost:3000",
+        "http://localhost:3001",
+        process.env.FRONTEND_URL!
+    ];
+
+    if (process.env.FRONTEND_URL && process.env.FRONTEND_URL !== "*") {
+        // Handle comma-separated URLs
+        process.env.FRONTEND_URL.split(",").forEach((url) => {
+            const trimmed = url.trim();
+            // Validate it's not empty and not a wildcard
+            if (trimmed && trimmed !== "*" && trimmed.startsWith("http")) {
+                allowed.push(trimmed);
+            }
+        });
+    }
+    
+    return allowed;
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 1. CORS
+// ─────────────────────────────────────────────────────────────────────────────
 app.use(cors({
-    origin: ["http://localhost:3000", process.env.FRONTEND_URL!],
+    origin: getAllowedOrigins(),
     methods: ["GET", "POST", "PUT", "PATCH", "DELETE"],
     credentials: true,
+    optionsSuccessStatus: 200,
 }));
-
-// const allowedOrigins: string[] = [
-//     "http://localhost:3000",
-//     "http://localhost:3001",
-// ];
-// if (process.env.FRONTEND_URL && process.env.FRONTEND_URL !== "*") {
-//     process.env.FRONTEND_URL.split(",").forEach((url) => {
-//         const trimmed = url.trim();
-//         if (trimmed) allowedOrigins.push(trimmed);
-//     });
-// }
-
-// app.use(cors({
-//     origin: (origin, callback) => {
-//         // Allow requests with no origin (Postman, curl, server-to-server)
-//         if (!origin) return callback(null, true);
-//         if (allowedOrigins.includes(origin)) return callback(null, true);
-//         callback(new Error(`CORS: Origin '${origin}' not allowed`));
-//     },
-//     methods: ["GET", "POST", "PUT", "PATCH", "DELETE"],
-//     credentials: true,              // Required for cookies to work cross-site
-// }));
 
 
 
