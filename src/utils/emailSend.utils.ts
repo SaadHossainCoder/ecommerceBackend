@@ -11,13 +11,16 @@ const isSMTPConfigured = () => {
 };
 
 const transporter = nodemailer.createTransport({
-  host: process.env.SMTP_HOST,
+  // host: process.env.SMTP_HOST,
   service: "gmail",
-  port: Number(process.env.SMTP_PORT),
-  secure: Number(process.env.SMTP_PORT) === 465, // ✅ auto-detect
+  // port: Number(process.env.SMTP_PORT),
+  // secure: Number(process.env.SMTP_PORT) === 465, // ✅ auto-detect
   auth: {
     user: process.env.SMTP_USER,
     pass: process.env.SMTP_PASS,
+  },
+   tls: {
+    rejectUnauthorized: false,         // Required for Render's outbound connections
   },
 });
 // const transporter = nodemailer.createTransport({
@@ -60,7 +63,7 @@ export const sendEmail = async (
     }
 
     const info = await transporter.sendMail({
-      from: `"Ecommerce App" <${process.env.SMTP_USER}>`,
+      from: `"khoshil" <${process.env.SMTP_USER}>`,
       to,
       subject,
       html,
