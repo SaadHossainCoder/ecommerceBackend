@@ -1,5 +1,5 @@
 {
-  "name": "ecommerce-backend",
+  "name": "khoshil-ecommerce-backend",
   "version": "1.0.0",
   "description": "",
   "main": "src/index.ts",
@@ -13,9 +13,17 @@
   "license": "ISC",
   "dependencies": {
     "@prisma/client": "^6.19.1",
+    "@tsconfig/node22": "^22.0.5",
     "@types/bcrypt": "^6.0.0",
+    "@types/cookie-parser": "^1.4.10",
+    "@types/cors": "^2.8.19",
+    "@types/express": "^5.0.5",
+    "@types/hpp": "^0.2.6",
     "@types/jsonwebtoken": "^9.0.10",
+    "@types/node": "^24.10.1",
     "@types/nodemailer": "^7.0.4",
+    "@types/qs": "^6.15.1",
+    "@types/winston": "^2.4.4",
     "bcrypt": "^6.0.0",
     "bcryptjs": "^3.0.3",
     "body-parser": "^1.20.2",
@@ -28,24 +36,16 @@
     "hpp": "^0.2.3",
     "jsonwebtoken": "^9.0.3",
     "nodemailer": "^7.0.11",
+    "prisma": "^6.19.1",
     "redis": "^5.11.0",
     "sanitize-html": "^2.17.0",
+    "typescript": "^5.9.3",
     "winston": "^3.19.0",
     "zod": "^4.1.13"
   },
   "devDependencies": {
-    "@tsconfig/node22": "^22.0.5",
-    "@types/cookie-parser": "^1.4.10",
-    "@types/cors": "^2.8.19",
-    "@types/express": "^5.0.5",
-    "@types/hpp": "^0.2.6",
-    "@types/node": "^24.10.1",
-    "@types/qs": "^6.15.1",
-    "@types/winston": "^2.4.4",
     "dotenv": "^16.4.5",
     "nodemon": "^3.1.11",
-    "prisma": "^6.19.1",
-    "tsx": "^4.21.0",
-    "typescript": "^5.9.3"
+    "tsx": "^4.21.0"
   }
 }
