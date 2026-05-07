@@ -40,6 +40,7 @@
     "@types/express": "^5.0.5",
     "@types/hpp": "^0.2.6",
     "@types/node": "^24.10.1",
+    "@types/qs": "^6.15.1",
     "@types/winston": "^2.4.4",
     "dotenv": "^16.4.5",
     "nodemon": "^3.1.11",
