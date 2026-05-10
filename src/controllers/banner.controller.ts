@@ -14,7 +14,7 @@ export const createBanner = async (req: Request, res: Response) => {
 
         // Invalidate cache
         await redisClient.del(CACHE_KEY_ALL);
-        
+
         return res.status(result.statusCode).json({
             ok: true,
             message: result.message,

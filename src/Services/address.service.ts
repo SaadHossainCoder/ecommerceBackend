@@ -34,7 +34,7 @@ export const createAddress = async (userId: string, data: {
 
         // If this is the first address, make it default
         const addressCount = await prisma.address.count({
-            where: { userId, deletedAt: null }
+            where: { userId, deletedAt: { isSet: false } }
         });
 
         const isDefault = data.isDefault || addressCount === 0;
@@ -93,7 +93,7 @@ export const createAddress = async (userId: string, data: {
 export const getAddressesByUser = async (userId: string) => {
     try {
         const addresses = await prisma.address.findMany({
-            where: { userId, deletedAt: null },    // ✅ exclude soft-deleted addresses
+            where: { userId, deletedAt: { isSet: false } },    // ✅ exclude soft-deleted addresses
             orderBy: [{ isDefault: "desc" }, { createdAt: "desc" }]
         });
         return {
@@ -110,7 +110,7 @@ export const getAddressesByUser = async (userId: string) => {
 export const getAddressById = async (addressId: string, userId: string) => {
     try {
         const address = await prisma.address.findFirst({
-            where: { id: addressId, userId, deletedAt: null }
+            where: { id: addressId, userId, deletedAt: { isSet: false } }
         });
         if (!address) {
             throw new AddressError("Address not found", apiStatusCode.NotFound);
@@ -130,7 +130,7 @@ export const getAddressById = async (addressId: string, userId: string) => {
 export const updateAddress = async (addressId: string, userId: string, data: Partial<any>) => {
     try {
         const existingAddress = await prisma.address.findFirst({
-            where: { id: addressId, userId, deletedAt: null }
+            where: { id: addressId, userId, deletedAt: { isSet: false } }
         });
 
         if (!existingAddress) {
@@ -178,7 +178,7 @@ export const updateAddress = async (addressId: string, userId: string, data: Par
 export const setDefaultAddress = async (addressId: string, userId: string) => {
     try {
         const address = await prisma.address.findFirst({
-            where: { id: addressId, userId, deletedAt: null }
+            where: { id: addressId, userId, deletedAt: { isSet: false } }
         });
 
         if (!address) {
@@ -211,7 +211,7 @@ export const setDefaultAddress = async (addressId: string, userId: string) => {
 export const deleteAddress = async (addressId: string, userId: string) => {
     try {
         const address = await prisma.address.findFirst({
-            where: { id: addressId, userId, deletedAt: null }
+            where: { id: addressId, userId, deletedAt: { isSet: false } }
         });
 
         if (!address) {
@@ -226,7 +226,7 @@ export const deleteAddress = async (addressId: string, userId: string) => {
         // If was default, pick another one to be default if exists
         if (address.isDefault) {
              const another = await prisma.address.findFirst({
-                 where: { userId, deletedAt: null },
+                 where: { userId, deletedAt: { isSet: false } },
                  orderBy: { createdAt: "desc" }
              });
              if (another) {

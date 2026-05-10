@@ -2,15 +2,27 @@ import { Response } from "express";
 import { AuthRequest } from "../types/express";
 import * as addressService from "../Services/address.service";
 import { apiStatusCode } from "../lib/apiCode.lib";
+import { verifyAccessToken } from "../utils/token.utils";
 
 // Create Address
 export const createAddress = async (req: AuthRequest, res: Response) => {
     try {
-        const userId = req.user?.id;
-        if (!userId) {
+        const token = req.cookies.accessToken;
+        if (!token) {
             return res.status(apiStatusCode.Unauthorized).json({
                 ok: false,
                 message: "Authentication required"
+            });
+        }
+
+        let userId: string;
+        try {
+            const payload = verifyAccessToken(token) as { id: string; role: string };
+            userId = payload.id;
+        } catch (error) {
+            return res.status(apiStatusCode.Unauthorized).json({
+                ok: false,
+                message: "Invalid or expired token"
             });
         }
 
@@ -32,11 +44,22 @@ export const createAddress = async (req: AuthRequest, res: Response) => {
 // Get User Addresses
 export const getAddressesByUser = async (req: AuthRequest, res: Response) => {
     try {
-        const userId = req.user?.id;
-        if (!userId) {
+        const token = req.cookies.accessToken;
+        if (!token) {
             return res.status(apiStatusCode.Unauthorized).json({
                 ok: false,
                 message: "Authentication required"
+            });
+        }
+
+        let userId: string;
+        try {
+            const payload = verifyAccessToken(token) as { id: string; role: string };
+            userId = payload.id;
+        } catch (error) {
+            return res.status(apiStatusCode.Unauthorized).json({
+                ok: false,
+                message: "Invalid or expired token"
             });
         }
 
@@ -58,14 +81,26 @@ export const getAddressesByUser = async (req: AuthRequest, res: Response) => {
 // Get Address By ID
 export const getAddressById = async (req: AuthRequest, res: Response) => {
     try {
-        const userId = req.user?.id;
-        const { id: addressId } = req.params;
-        if (!userId) {
+        const token = req.cookies.accessToken;
+        if (!token) {
             return res.status(apiStatusCode.Unauthorized).json({
                 ok: false,
                 message: "Authentication required"
             });
         }
+
+        let userId: string;
+        try {
+            const payload = verifyAccessToken(token) as { id: string; role: string };
+            userId = payload.id;
+        } catch (error) {
+            return res.status(apiStatusCode.Unauthorized).json({
+                ok: false,
+                message: "Invalid or expired token"
+            });
+        }
+
+        const { id: addressId } = req.params;
 
         const result = await addressService.getAddressById(addressId, userId);
         return res.status(result.statusCode).json({
@@ -85,14 +120,26 @@ export const getAddressById = async (req: AuthRequest, res: Response) => {
 // Update Address
 export const updateAddress = async (req: AuthRequest, res: Response) => {
     try {
-        const userId = req.user?.id;
-        const { id: addressId } = req.params;
-        if (!userId) {
+        const token = req.cookies.accessToken;
+        if (!token) {
             return res.status(apiStatusCode.Unauthorized).json({
                 ok: false,
                 message: "Authentication required"
             });
         }
+
+        let userId: string;
+        try {
+            const payload = verifyAccessToken(token) as { id: string; role: string };
+            userId = payload.id;
+        } catch (error) {
+            return res.status(apiStatusCode.Unauthorized).json({
+                ok: false,
+                message: "Invalid or expired token"
+            });
+        }
+
+        const { id: addressId } = req.params;
 
         const result = await addressService.updateAddress(addressId, userId, req.body);
         return res.status(result.statusCode).json({
@@ -112,14 +159,26 @@ export const updateAddress = async (req: AuthRequest, res: Response) => {
 // Set Default Address
 export const setDefaultAddress = async (req: AuthRequest, res: Response) => {
     try {
-        const userId = req.user?.id;
-        const { id: addressId } = req.params;
-        if (!userId) {
+        const token = req.cookies.accessToken;
+        if (!token) {
             return res.status(apiStatusCode.Unauthorized).json({
                 ok: false,
                 message: "Authentication required"
             });
         }
+
+        let userId: string;
+        try {
+            const payload = verifyAccessToken(token) as { id: string; role: string };
+            userId = payload.id;
+        } catch (error) {
+            return res.status(apiStatusCode.Unauthorized).json({
+                ok: false,
+                message: "Invalid or expired token"
+            });
+        }
+
+        const { id: addressId } = req.params;
 
         const result = await addressService.setDefaultAddress(addressId, userId);
         return res.status(result.statusCode).json({
@@ -138,14 +197,26 @@ export const setDefaultAddress = async (req: AuthRequest, res: Response) => {
 // Delete Address
 export const deleteAddress = async (req: AuthRequest, res: Response) => {
     try {
-        const userId = req.user?.id;
-        const { id: addressId } = req.params;
-        if (!userId) {
+        const token = req.cookies.accessToken;
+        if (!token) {
             return res.status(apiStatusCode.Unauthorized).json({
                 ok: false,
                 message: "Authentication required"
             });
         }
+
+        let userId: string;
+        try {
+            const payload = verifyAccessToken(token) as { id: string; role: string };
+            userId = payload.id;
+        } catch (error) {
+            return res.status(apiStatusCode.Unauthorized).json({
+                ok: false,
+                message: "Invalid or expired token"
+            });
+        }
+
+        const { id: addressId } = req.params;
 
         const result = await addressService.deleteAddress(addressId, userId);
         return res.status(result.statusCode).json({
