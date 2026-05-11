@@ -26,6 +26,7 @@ const getAllowedOrigins = () => {
     const allowed = [
         "http://localhost:3000",
         "http://localhost:3001",
+        "https://khoshil.khoshil-online.workers.dev",
         process.env.FRONTEND_URL!
     ];
 
