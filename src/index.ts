@@ -21,7 +21,7 @@ app.get("/", (req, res) => {
 async function startServer() {
     try {
         await prisma.$connect();
-       console.log("✅ Database connected");
+        console.log("✅ Database connected");
         // await connectRedis();
         console.log("Connected to Redis");
         app.listen(port, () => {
