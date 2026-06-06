@@ -4,7 +4,6 @@ import { getForgotPasswordEmail, getOtpEmail, getVerificationEmail, getForgotPas
 import { signAccessToken, verifyAccessToken } from "../utils/token.utils";
 import { apiStatusCode } from "../lib/apiCode.lib";
 import prisma from "../prisma/client";
-// import logger from "../lib/logger";
 import { Role } from "@prisma/client";
 
 // Custom errors

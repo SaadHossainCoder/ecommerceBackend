@@ -6,8 +6,9 @@ import { rateLimit } from "express-rate-limit";
 import { errorHandler } from "./middleware/error-handler.middleware";
 import cookieParser from 'cookie-parser';
 // import { apiStatusCode } from "./lib/apiCode.lib";
-import logger from "./lib/logger";
 import rootRouter from "./routes/allRoutes";
+// import morgan from "morgan";
+
 
 
 const app = express();
@@ -71,10 +72,8 @@ app.use(cookieParser());
 //Helmet - Secure Http headers
 app.use(helmet());
 
-// Prevent NoSQL injection ($gt, $ne)
-// DISABLED: express-mongo-sanitize incompatible with Node.js (query is read-only)
-// Use Zod/input validation instead
-// app.use(mongoSanitize());
+// Prevent NoSQL injection ($gt, $ne) — rely on Zod validation instead
+// express-mongo-sanitize is incompatible with Express 5.x (query property is read-only)
 
 // Prevent HTTP parameter pollution
 app.use(hpp());
@@ -86,7 +85,8 @@ app.use(hpp());
 // ─────────────────────────────────────────────────────────────────────────────
 const limiter = rateLimit({
     windowMs: 15 * 60 * 1000,                                          // 15 min window
-    max: process.env.NODE_ENV === "production" ? 100 : 500,            // 100 in prod, 500 in dev
+    max: process.env.NODE_ENV === "production" ? 100 : 500,           // 100 in prod, 500 in dev
+    // max:5,           
     standardHeaders: true,
     legacyHeaders: false,
     message: { ok: false, message: "Too many requests from this IP, please try again later." }
@@ -97,14 +97,16 @@ app.use(limiter);
 // ======================================================
 // 4. 📜 logger Handler (Moved up to capture all requests)
 // ======================================================
-app.use((req, res, next) => {
-    const start = Date.now();
-    res.on('finish', () => {
-        const duration = Date.now() - start;
-        logger.http(`${req.method} ${req.url} ${res.statusCode} - ${duration}ms`, { ip: req.ip });
-    });
-    next();
-});
+// app.use((req, res, next) => {
+//     const start = Date.now();
+//     res.on('finish', () => {
+//         const duration = Date.now() - start;
+//         logger.http(`${req.method} ${req.url} ${res.statusCode} - ${duration}ms`, { ip: req.ip });
+//     });
+//     next();
+// });
+
+// app.use(morgan('dev'));
 
 // ======================================================
 // 5. 🚀  Route

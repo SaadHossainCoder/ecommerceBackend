@@ -55,8 +55,12 @@ export const createSubCategory = async (req: Request, res: Response) => {
 export const getAllCategories = async (req: Request, res: Response) => {
     try {
         const { page, limit, featured, includeProducts, search, parentId } = req.query as any;
+        // Build a cache key that reflects query params to avoid serving wrong cached data
+        const cacheKey = search || page || limit || featured || parentId
+            ? `categories:all:${JSON.stringify({ page, limit, featured, includeProducts, search, parentId })}`
+            : CACHE_KEY_ALL;
         // Try to get from cache
-        const cachedData = await redisClient.get(CACHE_KEY_ALL);
+        const cachedData = await redisClient.get(cacheKey);
         if (cachedData) {
             // console.log("hit cache");
             return res.status(apiStatusCode.Success).json({
@@ -73,9 +77,9 @@ export const getAllCategories = async (req: Request, res: Response) => {
             search,
             parentId
         });
-        // Save to cache
-        await redisClient.setEx(CACHE_KEY_ALL, 3600, JSON.stringify(result));
-        // console.log("i am controller",result);
+        // Only cache the base (no-filter) request for a long time; filtered requests get a short TTL
+        const ttl = (search || page || limit || featured || parentId) ? 60 : 3600;
+        await redisClient.setEx(cacheKey, ttl, JSON.stringify(result));
         return res.status(apiStatusCode.Success).json({
             ok: true,
             message: "Categories fetched successfully",

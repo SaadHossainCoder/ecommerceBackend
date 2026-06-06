@@ -257,7 +257,17 @@ export const getFeaturedProductsBySlug = async (req: AuthRequest, res: Response)
 export const searchProducts = async (req: AuthRequest, res: Response) => {
     try {
         const { query, limit } = req.query;
-        const cacheKey = CACHE_KEY_SEARCH(query as string);
+
+        // Validate before cache lookup to avoid caching undefined keys
+        if (!query || typeof query !== "string" || query.trim().length < 2) {
+            return res.status(apiStatusCode.BadRequest).json({
+                ok: false,
+                message: "Search query must be at least 2 characters",
+            });
+        }
+
+        const trimmedQuery = query.trim();
+        const cacheKey = CACHE_KEY_SEARCH(trimmedQuery);
         const cachedData = await redisClient.get(cacheKey);
         if (cachedData) {
             return res.status(apiStatusCode.Success).json({
@@ -267,7 +277,7 @@ export const searchProducts = async (req: AuthRequest, res: Response) => {
             });
         }
         const result = await productService.searchProducts(
-            query as string,
+            trimmedQuery,
             limit ? Number(limit) : 20
         );
 

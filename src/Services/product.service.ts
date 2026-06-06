@@ -1,6 +1,7 @@
 import prisma from "../prisma/client";
 import { apiStatusCode } from "../lib/apiCode.lib";
 import { Prisma } from "@prisma/client";
+import { getMongoDb } from "../searchdb/mongodb.searchdb";
 
 // ====================== CUSTOM ERROR CLASS ======================
 export class ProductError extends Error {
@@ -402,34 +403,65 @@ export const getFeaturedProductsBySlug = async (slug: string, limit?: number) =>
 
 /**
  * Search products
+ * 
+ * This function uses MongoDB Atlas Search for efficient full-text searching across multiple fields (title, SKU, description) with support for fuzzy matching and relevance-based ranking. It also ensures that only available and non-disabled products are returned.
  */
+
 export const searchProducts = async (query: string, limit: number = 20) => {
     try {
         if (!query || query.trim().length < 2) {
             throw new ProductError("Search query must be at least 2 characters", apiStatusCode.BadRequest);
         }
 
-        return await prisma.product.findMany({
-            where: {
-                OR: [
-                    { title: { contains: query, mode: "insensitive" } },
-                    { sku: { contains: query, mode: "insensitive" } },
-                    { description: { contains: query, mode: "insensitive" } }
-                ],
-                disableProduct: false
-            },
-            take: limit,
-            select: {
-                id: true,
-                title: true,
-                slug: true
-            }
-        });
+        const db = await getMongoDb();
+
+        const products = await db
+            .collection("products")
+            .aggregate([
+                {
+                    $search: {
+                        index: "product_search",
+                        text: {
+                            query,
+                            path: [
+                                "title",
+                                "sku",
+                                "slug"
+                            ],
+                            fuzzy: {
+                                maxEdits: 2
+                            }
+                        }
+                    }
+                },
+                {
+                    $match: {
+                        disableProduct: false,
+                        productIsAvailable: true
+                    }
+                },
+                {
+                    $project: {
+                        _id: 1,
+                        title: 1,
+                        slug: 1,
+                        sku: 1,
+                    }
+                },
+                {
+                    $limit: limit
+                }
+            ])
+            .toArray()
+
+        return products;
+
     } catch (error: any) {
         if (error instanceof ProductError) throw error;
+        console.error("Search products error:", error);
         throw new ProductError(error?.message || "Failed to search products");
     }
-};
+}
 
 /**
  * Get single product by ID
@@ -847,7 +879,7 @@ export default {
     createProduct,
     getAllProducts,
     getFeaturedProducts,
-    searchProducts,
+    // searchProducts, 
     getProductById,
     getProductBySlug,
     updateProduct,

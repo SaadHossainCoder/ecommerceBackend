@@ -139,9 +139,17 @@ model Product {
   updatedAt DateTime @updatedAt
 
   @@index([vendorId])
-  @@index([categoryId])
-  @@index([disableProduct])
+  // @@index([disableProduct])
   @@index([createdAt(sort: Desc)])
+  @@index([categoryId])
+  @@index([featured])
+  @@index([productIsAvailable])
+  @@index([sold(sort: Desc)])
+  @@index([rating(sort: Desc)])
+  @@index([categoryId, disableProduct, productIsAvailable])
+  @@index([featured, disableProduct])
+  @@index([vendorId, disableProduct])
+  @@index([categoryId, featured, disableProduct])
   @@map("products")
 }
 
